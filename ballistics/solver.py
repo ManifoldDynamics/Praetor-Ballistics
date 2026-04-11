@@ -10,7 +10,7 @@ class Solver6DoF:
         self.env_earth = environment_earth
         self.latitude_rad = latitude_rad
 
-    def solve(self, t_span, initial_position, initial_velocity, initial_pitch, initial_yaw, spin_rate, max_step=0.01):
+    def solve(self, t_span, initial_position, initial_velocity, initial_pitch, initial_yaw, spin_rate, max_step=0.01, custom_events=None):
         if np.isscalar(initial_velocity):
             vx = initial_velocity * np.cos(initial_pitch) * np.cos(initial_yaw)
             vy = initial_velocity * np.cos(initial_pitch) * np.sin(initial_yaw)
@@ -46,6 +46,13 @@ class Solver6DoF:
         hit_ground.terminal = True
         hit_ground.direction = -1
 
+        events = [hit_ground]
+        if custom_events is not None:
+            if isinstance(custom_events, list):
+                events.extend(custom_events)
+            else:
+                events.append(custom_events)
+
         def eom_wrapper(t, y):
             return get_eom(t, y, self.projectile, self.aero, self.env_atm, self.env_earth, self.latitude_rad)
 
@@ -54,7 +61,7 @@ class Solver6DoF:
             t_span,
             y0,
             method='RK45',
-            events=hit_ground,
+            events=events,
             max_step=max_step,
             dense_output=True
         )

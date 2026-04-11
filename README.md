@@ -5,6 +5,7 @@ A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine written
 ## Features
 
 - **6-DoF Physics Solver**: Solves the complete equations of motion over time using Runge-Kutta integration, accurately modeling a rigid body's translation and rotation.
+- **Targeting & Zeroing System**: Iteratively solves for the exact Elevation (Pitch) and Azimuth (Yaw) required to intercept a specific 3D coordinate, taking into account spin drift, Coriolis effect, and aerodynamic drop.
 - **Environmental Modeling**: Uses standard models for Earth's gravity (with altitude decay), Coriolis effect, and the 1976 US Standard Atmosphere (calculating air density and speed of sound dynamically).
 - **Aerodynamics Model**: Supports calculating aerodynamic forces and moments based on:
   - Default simple analytical approximations
@@ -58,6 +59,26 @@ sol = solver.solve(t_span, pos0, v0, pitch0, yaw0, spin, max_step=0.1)
 
 print(f"Time of Flight: {sol.t[-1]:.2f} s")
 print(f"Impact Range: {sol.y[0, -1]:.2f} m")
+```
+
+## Target Intercept (Zeroing)
+
+Instead of guessing launch angles, you can use the `TargetingSystem` to find the exact firing solution needed to hit a specific 3D coordinate.
+
+```python
+from ballistics.targeting import TargetingSystem
+
+targeting = TargetingSystem(solver)
+
+target_x, target_y, target_z = 2500.0, 0.0, 50.0 # Hit a target 2.5km away and 50m high
+v0 = 800.0
+spin = 300.0 * 2 * 3.14159
+
+res = targeting.find_firing_solution([target_x, target_y, target_z], v0, spin)
+
+if res.success:
+    print(f"Required Pitch: {np.rad2deg(res.pitch):.2f} degrees")
+    print(f"Required Yaw: {np.rad2deg(res.yaw):.2f} degrees")
 ```
 
 ## Using Custom Aerodynamics Data (CSV)
