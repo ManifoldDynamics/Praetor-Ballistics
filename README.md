@@ -7,6 +7,7 @@ A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine written
 - **6-DoF Physics Solver**: Solves the complete equations of motion over time using Runge-Kutta integration, accurately modeling a rigid body's translation and rotation.
 - **Targeting & Zeroing System**: Iteratively solves for the exact Elevation (Pitch) and Azimuth (Yaw) required to intercept a specific 3D coordinate, taking into account spin drift, Coriolis effect, and aerodynamic drop.
 - **Environmental Modeling**: Uses standard models for Earth's gravity (with altitude decay), Coriolis effect, and the 1976 US Standard Atmosphere (calculating air density and speed of sound dynamically).
+- **Advanced Wind Profiles**: Support for 3D vector wind fields, allowing definition of custom layered crosswinds (by speed/azimuth or Cartesian vectors) that smoothly interpolate across altitude bands.
 - **Aerodynamics Model**: Supports calculating aerodynamic forces and moments based on:
   - Default simple analytical approximations
   - Standard Reference Models (G1 and G7 functions included out-of-the-box)
@@ -37,6 +38,11 @@ from ballistics.solver import Solver6DoF
 env_atm = StandardAtmosphere()
 env_earth = EarthModel()
 
+from ballistics.environment import WindProfile
+wind = WindProfile()
+# Define a 5 m/s wind blowing from the left (270 degrees azimuth) at all altitudes
+wind.set_constant_wind(vx=0.0, vy=-5.0, vz=0.0)
+
 # 2. Define the Projectile (Mass, Diameter, Inertia)
 proj = Projectile(mass=43.0, diameter=0.155, i_x=0.15, i_y=1.6)
 
@@ -44,7 +50,7 @@ proj = Projectile(mass=43.0, diameter=0.155, i_x=0.15, i_y=1.6)
 aero = Aerodynamics.g7()
 
 # 4. Setup Solver
-solver = Solver6DoF(proj, aero, env_atm, env_earth)
+solver = Solver6DoF(proj, aero, env_atm, env_earth, environment_wind=wind)
 
 # 5. Define Launch Parameters
 t_span = (0, 300)        # Max simulation time (s)

@@ -79,3 +79,75 @@ class EarthModel:
         a_coriolis = -2.0 * np.cross(omega_vec, velocity)
 
         return a_coriolis
+
+class WindProfile:
+    """
+    Models a 3D wind vector field that can vary with altitude.
+    Interpolates smoothly between defined altitude layers.
+    """
+    def __init__(self):
+        # We start with a default zero-wind profile
+        self.altitudes = np.array([0.0, 100000.0]) # Surface to near-space
+        self.wind_vectors = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+        self._build_interpolator()
+
+    def _build_interpolator(self):
+        from scipy.interpolate import interp1d
+
+        # If there's only one layer, interp1d will fail with linear, so we double it
+        if len(self.altitudes) == 1:
+            self.altitudes = np.array([self.altitudes[0], self.altitudes[0] + 100000.0])
+            self.wind_vectors = np.array([self.wind_vectors[0], self.wind_vectors[0]])
+
+        # Interpolate along the altitude axis (axis 0 of the vectors)
+        # We clamp to the nearest boundary if outside the defined altitudes
+        self._interpolator = interp1d(
+            self.altitudes,
+            self.wind_vectors,
+            axis=0,
+            kind='linear',
+            bounds_error=False,
+            fill_value=(self.wind_vectors[0], self.wind_vectors[-1])
+        )
+
+    def set_constant_wind(self, vx, vy, vz=0.0):
+        """Sets a uniform wind field for all altitudes."""
+        self.altitudes = np.array([0.0, 100000.0])
+        self.wind_vectors = np.array([[vx, vy, vz], [vx, vy, vz]])
+        self._build_interpolator()
+
+    def set_wind_layers(self, altitudes, vectors):
+        """
+        Defines wind at specific altitude layers.
+        altitudes: List or array of altitudes in meters (must be sorted ascending)
+        vectors: List of [Vx, Vy, Vz] arrays for each altitude
+        """
+        self.altitudes = np.array(altitudes)
+        self.wind_vectors = np.array(vectors)
+        # Ensure it is sorted by altitude
+        sort_idx = np.argsort(self.altitudes)
+        self.altitudes = self.altitudes[sort_idx]
+        self.wind_vectors = self.wind_vectors[sort_idx]
+        self._build_interpolator()
+
+    def set_wind_layers_polar(self, altitudes, speeds, azimuths_deg, updrafts=0.0):
+        """
+        Defines wind layers using polar coordinates (Speed and Direction).
+        azimuth_deg: The direction the wind is BLOWING TOWARDS (0 deg = North/X-axis)
+        """
+        vectors = []
+        # If updrafts is a scalar, make it a list
+        if np.isscalar(updrafts):
+            updrafts = [updrafts] * len(altitudes)
+
+        for speed, az, vz in zip(speeds, azimuths_deg, updrafts):
+            az_rad = np.deg2rad(az)
+            vx = speed * np.cos(az_rad)
+            vy = speed * np.sin(az_rad)
+            vectors.append([vx, vy, vz])
+
+        self.set_wind_layers(altitudes, vectors)
+
+    def get_wind(self, altitude):
+        """Returns the [Vx, Vy, Vz] wind vector at the given altitude."""
+        return self._interpolator(altitude)

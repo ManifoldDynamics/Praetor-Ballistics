@@ -31,3 +31,34 @@ def test_coriolis():
     assert np.isclose(a[0], 0.0)
     assert np.isclose(a[1], 0.0)
     assert np.isclose(a[2], 2.0 * EarthModel.OMEGA * 1000.0)
+
+from ballistics.environment import WindProfile
+
+def test_wind_profile():
+    wind = WindProfile()
+
+    # Default is zero
+    assert np.all(wind.get_wind(100) == [0, 0, 0])
+
+    # Constant wind
+    wind.set_constant_wind(5.0, -2.0)
+    assert np.all(wind.get_wind(500) == [5.0, -2.0, 0.0])
+
+    # Layered Wind
+    alts = [0, 100, 200]
+    vecs = [[0, 0, 0], [10, 0, 0], [10, 10, 0]]
+    wind.set_wind_layers(alts, vecs)
+
+    # Interpolation
+    assert np.all(wind.get_wind(50) == [5.0, 0.0, 0.0])
+    assert np.all(wind.get_wind(150) == [10.0, 5.0, 0.0])
+
+    # Out of bounds clamping
+    assert np.all(wind.get_wind(300) == [10.0, 10.0, 0.0])
+    assert np.all(wind.get_wind(-10) == [0.0, 0.0, 0.0])
+
+    # Polar setup (Blowing 90 deg / Y-axis)
+    wind.set_wind_layers_polar([0], [10.0], [90.0])
+    v = wind.get_wind(0)
+    assert np.isclose(v[0], 0.0, atol=1e-10)
+    assert np.isclose(v[1], 10.0)
