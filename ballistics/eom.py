@@ -49,6 +49,32 @@ def rotation_matrix_to_quaternion(R):
     return q / np.linalg.norm(q)
 
 
+def quaternion_to_euler(q):
+    """
+    Convert a quaternion (q0, q1, q2, q3) to Euler angles (yaw, pitch, roll) in radians.
+    Assumes Z-Y-X rotation sequence.
+    """
+    q0, q1, q2, q3 = q
+    # Normalize
+    norm = np.linalg.norm(q)
+    q0, q1, q2, q3 = q0/norm, q1/norm, q2/norm, q3/norm
+
+    # Roll (x-axis rotation)
+    sinr_cosp = 2 * (q0 * q1 + q2 * q3)
+    cosr_cosp = 1 - 2 * (q1 * q1 + q2 * q2)
+    roll = np.arctan2(sinr_cosp, cosr_cosp)
+
+    # Pitch (y-axis rotation)
+    sinp = np.clip(2 * (q0 * q2 - q3 * q1), -1.0, 1.0)
+    pitch = np.arcsin(sinp)
+
+    # Yaw (z-axis rotation)
+    siny_cosp = 2 * (q0 * q3 + q1 * q2)
+    cosy_cosp = 1 - 2 * (q2 * q2 + q3 * q3)
+    yaw = np.arctan2(siny_cosp, cosy_cosp)
+
+    return yaw, pitch, roll
+
 def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, latitude_rad=0.0):
     pos = state[0:3]
     vel = state[3:6]
