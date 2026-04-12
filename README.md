@@ -6,6 +6,7 @@ A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine written
 
 - **6-DoF Physics Solver**: Solves the complete equations of motion over time using Runge-Kutta integration, accurately modeling a rigid body's translation and rotation.
 - **Targeting & Zeroing System**: Iteratively solves for the exact Elevation (Pitch) and Azimuth (Yaw) required to intercept a specific 3D coordinate, taking into account spin drift, Coriolis effect, and aerodynamic drop.
+- **Terminal Ballistics**: Includes standard empirical armor penetration formulas (`De Marre`, `Krupp`, `Lanz-Odermatt` for APFSDS) to estimate lethality against armor upon target impact.
 - **Environmental Modeling**: Uses standard models for Earth's gravity (with altitude decay), Coriolis effect, and atmospheric properties. Supports custom weather baselines (accounting for humidity via Virtual Temperature) and **Live Weather Fetching** using coordinates.
 - **Advanced Wind Profiles**: Support for 3D vector wind fields, allowing definition of custom layered crosswinds (by speed/azimuth or Cartesian vectors) that smoothly interpolate across altitude bands.
 - **Aerodynamics Model**: Supports calculating aerodynamic forces and moments based on:
@@ -83,11 +84,19 @@ target_x, target_y, target_z = 2500.0, 0.0, 50.0 # Hit a target 2.5km away and 5
 v0 = 800.0
 spin = 300.0 * 2 * 3.14159
 
-res = targeting.find_firing_solution([target_x, target_y, target_z], v0, spin)
+# Optionally calculate Terminal Ballistics penetration depth (Lanz-Odermatt for APFSDS)
+res = targeting.find_firing_solution(
+    [target_x, target_y, target_z],
+    v0,
+    spin,
+    penetration_model='lanz_odermatt',
+    penetration_kwargs={'penetrator_density_kg_m3': 17600.0, 'penetrator_length_m': 0.6}
+)
 
 if res.success:
     print(f"Required Pitch: {np.rad2deg(res.pitch):.2f} degrees")
     print(f"Required Yaw: {np.rad2deg(res.yaw):.2f} degrees")
+    print(f"Armor Penetration: {res.penetration_mm:.1f} mm of RHA steel")
 ```
 
 ## Using Custom CAD Models (STL)

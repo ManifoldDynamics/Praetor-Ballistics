@@ -1,8 +1,10 @@
 import numpy as np
 from scipy.optimize import root
 
+from ballistics.terminal import TerminalBallistics
+
 class TargetingResult:
-    def __init__(self, success, pitch, yaw, time_of_flight, terminal_velocity, terminal_energy, trajectory, message):
+    def __init__(self, success, pitch, yaw, time_of_flight, terminal_velocity, terminal_energy, trajectory, message, penetration_mm=None):
         self.success = success
         self.pitch = pitch
         self.yaw = yaw
@@ -11,6 +13,7 @@ class TargetingResult:
         self.terminal_energy = terminal_energy
         self.trajectory = trajectory
         self.message = message
+        self.penetration_mm = penetration_mm
 
 class TargetingSystem:
     def __init__(self, solver):
@@ -19,15 +22,19 @@ class TargetingSystem:
         """
         self.solver = solver
 
-    def find_firing_solution(self, target_pos, v0, spin_rate, initial_guess_pitch=None, initial_guess_yaw=0.0):
+    def find_firing_solution(self, target_pos, v0, spin_rate, initial_guess_pitch=None, initial_guess_yaw=0.0, penetration_model=None, penetration_kwargs=None):
         """
         Finds the required pitch and yaw angles to hit a 3D target coordinate.
 
         target_pos: [X, Y, Z] of the target
         v0: Muzzle velocity
         spin_rate: Projectile spin rate
+        penetration_model: Optional string ('demarre', 'krupp', 'lanz_odermatt') to compute terminal penetration.
+        penetration_kwargs: Additional kwargs for the chosen penetration model (e.g. penetrator_length_m).
         """
         x_t, y_t, z_t = target_pos
+        if penetration_kwargs is None:
+            penetration_kwargs = {}
 
         # Determine initial guess for pitch using a simple vacuum parabola approximation
         if initial_guess_pitch is None:
@@ -113,7 +120,19 @@ class TargetingSystem:
                 return TargetingResult(False, opt_pitch, opt_yaw, sol.t[-1], term_vel, term_energy, sol,
                                        f"Optimizer converged but final error is too high ({dist_error:.2f}m). Target may be unreachable.")
 
-            return TargetingResult(True, opt_pitch, opt_yaw, sol.t[-1], term_vel, term_energy, sol, "Target hit successfully.")
+            # Compute Penetration
+            penetration_mm = None
+            if penetration_model:
+                mass = self.solver.projectile.mass
+                diameter = self.solver.projectile.diameter
+                if penetration_model.lower() == 'demarre':
+                    penetration_mm = TerminalBallistics.demarre(term_vel, mass, diameter, **penetration_kwargs)
+                elif penetration_model.lower() == 'krupp':
+                    penetration_mm = TerminalBallistics.krupp(term_vel, mass, diameter, **penetration_kwargs)
+                elif penetration_model.lower() == 'lanz_odermatt':
+                    penetration_mm = TerminalBallistics.lanz_odermatt(term_vel, **penetration_kwargs)
+
+            return TargetingResult(True, opt_pitch, opt_yaw, sol.t[-1], term_vel, term_energy, sol, "Target hit successfully.", penetration_mm)
 
         else:
             return TargetingResult(False, 0, 0, 0, 0, 0, None, f"Optimization failed: {res.message}")
