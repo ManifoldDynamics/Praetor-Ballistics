@@ -75,7 +75,13 @@ def quaternion_to_euler(q):
 
     return yaw, pitch, roll
 
-def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0):
+def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0, propulsion=None):
+    """
+    propulsion: None, or a dict containing:
+      - 'thrust_n': Thrust in Newtons
+      - 'burn_time_s': Duration of motor burn
+      - 'propellant_mass_kg': Mass expelled during burn
+    """
     pos = state[0:3]
     vel = state[3:6] # Inertial velocity
     q = state[6:10]
@@ -124,7 +130,26 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
 
     S = projectile.reference_area
     d = projectile.diameter
+
+    # Active Propulsion / Time-Varying Mass
     m = projectile.mass
+    thrust_n = 0.0
+    if propulsion is not None and propulsion.get('active', False):
+        burn_t = propulsion.get('burn_time_s', 0.0)
+        p_mass = propulsion.get('propellant_mass_kg', 0.0)
+        max_t = propulsion.get('thrust_n', 0.0)
+
+        if t <= burn_t and burn_t > 0:
+            thrust_n = max_t
+            # Mass decreases linearly as propellant burns
+            m = projectile.mass - p_mass * (t / burn_t)
+        else:
+            # Burnout complete
+            thrust_n = 0.0
+            m = projectile.mass - p_mass
+
+    # Base drag reduction / rocket flame effect logic could be added here
+    # (e.g., Cd reduces while motor is burning due to base bleed effect)
 
     # Drag is primarily axial
     C_X = -aero.cd(mach)
@@ -187,10 +212,14 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     F_aero_body_no_drag = np.array([0.0, C_Y + C_Y_mag, C_Z + C_Z_mag]) * q_dyn * S
     F_lift_earth = R_b2e @ F_aero_body_no_drag
 
+    # Active Thrust vector (assumes thrust acts strictly along the body's forward X-axis)
+    F_thrust_body = np.array([thrust_n, 0.0, 0.0])
+    F_thrust_earth = R_b2e @ F_thrust_body
+
     F_gravity_earth = np.array([0, 0, -g * m])
     F_coriolis_earth = m * env_earth.coriolis_acceleration(vel, latitude_rad)
 
-    F_total_earth = F_drag_earth + F_lift_earth + F_gravity_earth + F_coriolis_earth
+    F_total_earth = F_drag_earth + F_lift_earth + F_thrust_earth + F_gravity_earth + F_coriolis_earth
 
     accel = F_total_earth / m
 

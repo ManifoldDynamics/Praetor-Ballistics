@@ -6,6 +6,9 @@ A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine written
 
 - **6-DoF Physics Solver**: Solves the complete equations of motion over time using Runge-Kutta integration, accurately modeling a rigid body's translation and rotation.
 - **Interior Ballistics Thermodynamics**: Solves lumped-parameter thermodynamic differential equations (like STANAG 4367) to calculate the pressure curve, burn fraction, and muzzle velocity of a projectile based on chamber volume, barrel length, charge mass, and propellant type. Includes a database of standard energetic materials.
+- **Active Propulsion**: Supports modeling rocket-assisted projectiles (RAP) or missiles via configurable thrust vectors and time-varying mass loss curves.
+- **PyVista 3D Visualization**: Renders stunning, interactive 3D flight paths of the simulated trajectory directly from the GUI.
+- **Monte Carlo Dispersion**: Simulates $N$ parallel shots utilizing Python `multiprocessing` to introduce variance into projectile mass, muzzle velocity, wind speed, and firing angles, calculating the resulting Circular Error Probable (CEP) and Mean Point of Impact (MPI).
 - **Targeting & Zeroing System**: Iteratively solves for the exact Elevation (Pitch) and Azimuth (Yaw) required to intercept a specific 3D coordinate, taking into account spin drift, Coriolis effect, and aerodynamic drop.
 - **Terminal Ballistics**: Includes standard empirical armor penetration formulas (`De Marre`, `Krupp`, `Lanz-Odermatt` for APFSDS) to estimate lethality against armor upon target impact.
 - **Environmental Modeling**: Uses standard models for Earth's gravity (with altitude decay), Coriolis effect, and atmospheric properties. Supports custom weather baselines (accounting for humidity via Virtual Temperature) and **Live Weather Fetching** using coordinates.
@@ -29,7 +32,7 @@ pip install -r requirements.txt
 
 ## Desktop GUI
 
-The easiest way to interact with the engine is via the built-in PyQt6 graphical user interface. This provides a split-pane layout to configure interior thermodynamics (propellant type, barrel length), download live weather via GPS coordinates, set target parameters, and calculate the exact firing solution while instantly plotting the 3D trajectory profiles.
+The easiest way to interact with the engine is via the built-in PyQt6 graphical user interface. This provides a split-pane layout to configure interior thermodynamics (propellant type, barrel length), download live weather via GPS coordinates, set target parameters, and calculate the exact firing solution while instantly plotting the 3D trajectory profiles. It also features a dedicated **Monte Carlo Dispersion tab** to visualize your weapon system's CEP hit-probability envelope natively.
 
 ```bash
 python gui.py

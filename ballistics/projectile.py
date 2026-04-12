@@ -66,6 +66,19 @@ class Aerodynamics:
     """
     Aerodynamic coefficients, handled either as analytical functions or via tabular data lookup.
     """
+    @staticmethod
+    def _default_cd(mach): return float(0.2 + 0.1 * np.exp(-0.5 * ((mach - 1.0)/0.2)**2))
+    @staticmethod
+    def _default_cl(mach): return 0.1
+    @staticmethod
+    def _default_cma(mach): return 2.5
+    @staticmethod
+    def _default_cmaq(mach): return -10.0
+    @staticmethod
+    def _default_cnlp(mach): return 0.5
+    @staticmethod
+    def _default_cmag(mach): return -0.5
+
     def __init__(self, cd=None, cl=None, cma=None, cmaq=None, cnlp=None, cmag=None):
         """
         Initialize coefficients. They can be passed as:
@@ -74,12 +87,12 @@ class Aerodynamics:
         - A scalar value for a constant coefficient.
         - None, which will fall back to a default simplified model.
         """
-        self._cd_func = self._build_callable(cd, lambda mach: 0.2 + 0.1 * np.exp(-0.5 * ((mach - 1.0)/0.2)**2))
-        self._cl_func = self._build_callable(cl, lambda mach: 0.1)
-        self._cma_func = self._build_callable(cma, lambda mach: 2.5)
-        self._cmaq_func = self._build_callable(cmaq, lambda mach: -10.0)
-        self._cnlp_func = self._build_callable(cnlp, lambda mach: 0.5)
-        self._cmag_func = self._build_callable(cmag, lambda mach: -0.5)
+        self._cd_func = self._build_callable(cd, self._default_cd)
+        self._cl_func = self._build_callable(cl, self._default_cl)
+        self._cma_func = self._build_callable(cma, self._default_cma)
+        self._cmaq_func = self._build_callable(cmaq, self._default_cmaq)
+        self._cnlp_func = self._build_callable(cnlp, self._default_cnlp)
+        self._cmag_func = self._build_callable(cmag, self._default_cmag)
 
     def _build_callable(self, input_val, default_func, kind='linear', bounds_error=False, fill_value='extrapolate'):
         if input_val is None:
@@ -87,7 +100,11 @@ class Aerodynamics:
         if callable(input_val):
             return input_val
         if isinstance(input_val, (int, float)):
-            return lambda mach: float(input_val)
+            # Create a true class to hold constant values so they are picklable
+            class ConstantReturn:
+                def __init__(self, val): self.val = float(val)
+                def __call__(self, mach): return self.val
+            return ConstantReturn(input_val)
         if isinstance(input_val, tuple) and len(input_val) == 2:
             mach_arr, coeff_arr = input_val
             return interp1d(mach_arr, coeff_arr, kind=kind, bounds_error=bounds_error, fill_value=fill_value)

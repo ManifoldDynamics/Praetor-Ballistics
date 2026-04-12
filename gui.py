@@ -4,7 +4,8 @@ import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QLineEdit, QPushButton,
                              QGroupBox, QFormLayout, QTextEdit, QComboBox,
-                             QStackedWidget, QFileDialog, QMenuBar, QMenu)
+                             QStackedWidget, QFileDialog, QMenuBar, QMenu,
+                             QTabWidget)
 from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt
 
@@ -20,6 +21,8 @@ from ballistics.project import BallisticsProject
 from ballistics.propellants import PROPELLANT_DATABASE, Propellant
 from ballistics.interior_ballistics import GunSystem, Charge
 from ballistics.interior_solver import InteriorSolver
+from ballistics.monte_carlo import MonteCarloSimulator
+from ballistics.viz3d import visualize_trajectory_3d
 
 class MplCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=8, dpi=100):
@@ -52,6 +55,47 @@ class MplCanvas(FigureCanvas):
 
         self.draw()
 
+    def plot_dispersion(self, mc_res):
+        self.ax_side.clear()
+        self.ax_top.clear()
+
+        # Hide the bottom plot for dispersion, we only need a 2D scatter
+        self.ax_top.set_visible(False)
+
+        # Re-configure top plot (which is actually ax_side)
+        ax = self.ax_side
+
+        impacts = mc_res.impacts
+        u = impacts[:, 0]
+        v = impacts[:, 1]
+
+        ax.scatter(u, v, c='red', alpha=0.5, label='Impacts')
+        ax.plot(mc_res.mpi[0], mc_res.mpi[1], 'gx', markersize=10, markeredgewidth=3, label='MPI')
+
+        # Draw CEP circle
+        circle = plt.Circle((mc_res.mpi[0], mc_res.mpi[1]), mc_res.cep_50, color='blue', fill=False, linestyle='--', linewidth=2, label=f'CEP50 ({mc_res.cep_50:.2f}m)')
+        ax.add_patch(circle)
+
+        if mc_res.target_plane == 'vertical':
+            ax.set_xlabel('Deflection Y (m)')
+            ax.set_ylabel('Elevation Z (m)')
+            ax.set_title('Vertical Impact Plane')
+        else:
+            ax.set_xlabel('Range X (m)')
+            ax.set_ylabel('Deflection Y (m)')
+            ax.set_title('Horizontal Ground Impact Plane')
+
+        ax.legend()
+        ax.grid(True)
+        ax.set_aspect('equal', adjustable='datalim')
+
+        self.draw()
+
+    def reset_layout(self):
+        self.ax_top.set_visible(True)
+
+
+import matplotlib.pyplot as plt
 
 class BallisticsGUI(QMainWindow):
     def __init__(self):
@@ -192,6 +236,21 @@ class BallisticsGUI(QMainWindow):
         group_proj.setLayout(form_proj)
         left_layout.addWidget(group_proj)
 
+        # Active Propulsion Inputs
+        group_prop = QGroupBox("Active Propulsion (Rockets)")
+        group_prop.setCheckable(True)
+        group_prop.setChecked(False)
+        self.group_prop = group_prop
+        form_prop = QFormLayout()
+        self.input_thrust = QLineEdit("1000.0")
+        self.input_burn_time = QLineEdit("2.0")
+        self.input_prop_mass = QLineEdit("2.0")
+        form_prop.addRow("Thrust (N):", self.input_thrust)
+        form_prop.addRow("Burn Time (s):", self.input_burn_time)
+        form_prop.addRow("Propellant Mass (kg):", self.input_prop_mass)
+        group_prop.setLayout(form_prop)
+        left_layout.addWidget(group_prop)
+
         # Environment Inputs
         group_env = QGroupBox("Environment")
         form_env = QFormLayout()
@@ -224,13 +283,50 @@ class BallisticsGUI(QMainWindow):
         group_target.setLayout(form_target)
         left_layout.addWidget(group_target)
 
-        # Calculate Button
-        self.btn_calc = QPushButton("Calculate Firing Solution")
+        # Dispersion Inputs
+        group_disp = QGroupBox("Monte Carlo Dispersion (Std Dev)")
+        form_disp = QFormLayout()
+        self.input_sd_v0 = QLineEdit()
+        self.input_sd_mass = QLineEdit()
+        self.input_sd_wind = QLineEdit()
+        self.input_sd_pitch = QLineEdit()
+        self.input_sd_yaw = QLineEdit()
+        self.input_shots = QLineEdit()
+        self.combo_plane = QComboBox()
+        self.combo_plane.addItems(["vertical", "horizontal"])
+
+        form_disp.addRow("Shots:", self.input_shots)
+        form_disp.addRow("Target Plane:", self.combo_plane)
+        form_disp.addRow("SD V0 (m/s):", self.input_sd_v0)
+        form_disp.addRow("SD Mass (kg):", self.input_sd_mass)
+        form_disp.addRow("SD Wind (m/s):", self.input_sd_wind)
+        form_disp.addRow("SD Pitch (deg):", self.input_sd_pitch)
+        form_disp.addRow("SD Yaw (deg):", self.input_sd_yaw)
+        group_disp.setLayout(form_disp)
+        left_layout.addWidget(group_disp)
+
+        # Calculate Buttons
+        btn_layout = QHBoxLayout()
+        self.btn_calc = QPushButton("Find Firing Solution")
         self.btn_calc.setStyleSheet("background-color: darkred; color: white; font-weight: bold; padding: 10px;")
         self.btn_calc.clicked.connect(self.calculate_solution)
-        left_layout.addWidget(self.btn_calc)
 
-        left_layout.addStretch()
+        self.btn_mc = QPushButton("Run Monte Carlo")
+        self.btn_mc.setStyleSheet("background-color: darkgreen; color: white; font-weight: bold; padding: 10px;")
+        self.btn_mc.clicked.connect(self.run_monte_carlo)
+
+        self.btn_3d = QPushButton("View 3D Trajectory (PyVista)")
+        self.btn_3d.setStyleSheet("background-color: darkblue; color: white; font-weight: bold; padding: 10px;")
+        self.btn_3d.setEnabled(False) # Will enable after a successful calculation
+        self.btn_3d.clicked.connect(self.view_3d_scene)
+
+        btn_layout.addWidget(self.btn_calc)
+        btn_layout.addWidget(self.btn_mc)
+        left_layout.addLayout(btn_layout)
+        left_layout.addWidget(self.btn_3d)
+
+        # We don't add stretch so things compress naturally if window is small
+        # Or add scroll area if needed, but it should fit in 800px height.
 
         # Right Panel - Outputs
         right_panel = QWidget()
@@ -242,8 +338,21 @@ class BallisticsGUI(QMainWindow):
         self.text_output.setStyleSheet("font-family: monospace;")
         right_layout.addWidget(self.text_output)
 
-        self.canvas = MplCanvas(self, width=6, height=6, dpi=100)
-        right_layout.addWidget(self.canvas)
+        self.tabs = QTabWidget()
+        self.tab_traj = QWidget()
+        self.tab_disp = QWidget()
+        self.tabs.addTab(self.tab_traj, "Trajectory Profile")
+        self.tabs.addTab(self.tab_disp, "Dispersion Scatter")
+
+        traj_layout = QVBoxLayout(self.tab_traj)
+        self.canvas_traj = MplCanvas(self, width=6, height=6, dpi=100)
+        traj_layout.addWidget(self.canvas_traj)
+
+        disp_layout = QVBoxLayout(self.tab_disp)
+        self.canvas_disp = MplCanvas(self, width=6, height=6, dpi=100)
+        disp_layout.addWidget(self.canvas_disp)
+
+        right_layout.addWidget(self.tabs)
 
         main_layout.addWidget(left_panel)
         main_layout.addWidget(right_panel)
@@ -279,6 +388,25 @@ class BallisticsGUI(QMainWindow):
         self.input_ty.setText(str(t.get("y_m", 0.0)))
         self.input_tz.setText(str(t.get("z_m", 0.0)))
 
+        # Dispersion
+        d = state.get("dispersion", {})
+        self.input_shots.setText(str(d.get("shots", 50)))
+        self.input_sd_v0.setText(str(d.get("v0_sd_ms", 2.0)))
+        self.input_sd_mass.setText(str(d.get("mass_sd_kg", 0.01)))
+        self.input_sd_wind.setText(str(d.get("wind_speed_sd_ms", 1.0)))
+        self.input_sd_pitch.setText(str(d.get("pitch_sd_deg", 0.05)))
+        self.input_sd_yaw.setText(str(d.get("yaw_sd_deg", 0.05)))
+        plane_idx = self.combo_plane.findText(d.get("plane", "vertical"))
+        if plane_idx >= 0:
+            self.combo_plane.setCurrentIndex(plane_idx)
+
+        # Propulsion
+        pr = state.get("propulsion", {})
+        self.group_prop.setChecked(pr.get("active", False))
+        self.input_thrust.setText(str(pr.get("thrust_n", 1000.0)))
+        self.input_burn_time.setText(str(pr.get("burn_time_s", 2.0)))
+        self.input_prop_mass.setText(str(pr.get("propellant_mass_kg", 2.0)))
+
     def populate_project_from_gui(self):
         state = self.project.state
         try:
@@ -296,6 +424,21 @@ class BallisticsGUI(QMainWindow):
             state["target"]["x_m"] = float(self.input_tx.text())
             state["target"]["y_m"] = float(self.input_ty.text())
             state["target"]["z_m"] = float(self.input_tz.text())
+
+            state["dispersion"]["shots"] = int(self.input_shots.text())
+            state["dispersion"]["v0_sd_ms"] = float(self.input_sd_v0.text())
+            state["dispersion"]["mass_sd_kg"] = float(self.input_sd_mass.text())
+            state["dispersion"]["wind_speed_sd_ms"] = float(self.input_sd_wind.text())
+            state["dispersion"]["pitch_sd_deg"] = float(self.input_sd_pitch.text())
+            state["dispersion"]["yaw_sd_deg"] = float(self.input_sd_yaw.text())
+            state["dispersion"]["plane"] = self.combo_plane.currentText()
+
+            state["propulsion"] = {
+                "active": self.group_prop.isChecked(),
+                "thrust_n": float(self.input_thrust.text()),
+                "burn_time_s": float(self.input_burn_time.text()),
+                "propellant_mass_kg": float(self.input_prop_mass.text())
+            }
         except ValueError:
             pass # Ignore conversion errors when typing
 
@@ -389,23 +532,25 @@ class BallisticsGUI(QMainWindow):
                 self.text_output.setText(out)
 
                 # Plot P-T Curve
-                self.canvas.ax_side.clear()
-                self.canvas.ax_top.clear()
+                self.canvas_traj.reset_layout()
+                self.canvas_traj.ax_side.clear()
+                self.canvas_traj.ax_top.clear()
 
                 # We will just reuse the top/side axes for interior plotting temporarily
-                self.canvas.ax_side.plot(res.travel_m, res.pressure_pa / 1e6, 'b-')
-                self.canvas.ax_side.set_title('Pressure Curve')
-                self.canvas.ax_side.set_xlabel('Travel (m)')
-                self.canvas.ax_side.set_ylabel('Pressure (MPa)')
-                self.canvas.ax_side.grid(True)
+                self.canvas_traj.ax_side.plot(res.travel_m, res.pressure_pa / 1e6, 'b-')
+                self.canvas_traj.ax_side.set_title('Pressure Curve')
+                self.canvas_traj.ax_side.set_xlabel('Travel (m)')
+                self.canvas_traj.ax_side.set_ylabel('Pressure (MPa)')
+                self.canvas_traj.ax_side.grid(True)
 
-                self.canvas.ax_top.plot(res.travel_m, res.velocity_ms, 'g-')
-                self.canvas.ax_top.set_title('Velocity Curve')
-                self.canvas.ax_top.set_xlabel('Travel (m)')
-                self.canvas.ax_top.set_ylabel('Velocity (m/s)')
-                self.canvas.ax_top.grid(True)
+                self.canvas_traj.ax_top.plot(res.travel_m, res.velocity_ms, 'g-')
+                self.canvas_traj.ax_top.set_title('Velocity Curve')
+                self.canvas_traj.ax_top.set_xlabel('Travel (m)')
+                self.canvas_traj.ax_top.set_ylabel('Velocity (m/s)')
+                self.canvas_traj.ax_top.grid(True)
 
-                self.canvas.draw()
+                self.canvas_traj.draw()
+                self.tabs.setCurrentIndex(0)
             else:
                 self.text_output.setText("Interior Solver Failed.")
         except Exception as e:
@@ -453,7 +598,9 @@ class BallisticsGUI(QMainWindow):
             if w_speed > 0:
                 wind.set_wind_layers_polar([0], [w_speed], [w_dir])
 
-            solver = Solver6DoF(proj, aero, self.current_atm, env_earth, environment_wind=wind)
+            propulsion = state.get("propulsion", None)
+
+            solver = Solver6DoF(proj, aero, self.current_atm, env_earth, environment_wind=wind, propulsion=propulsion)
             targeting = TargetingSystem(solver)
 
             tx = state["target"]["x_m"]
@@ -477,16 +624,108 @@ class BallisticsGUI(QMainWindow):
                     out += f"Armor Penetration: {res.penetration_mm:.1f} mm (De Marre)\n"
 
                 self.text_output.setText(out)
-                self.canvas.plot_trajectory(res.trajectory)
+                self.canvas_traj.reset_layout()
+                self.canvas_traj.plot_trajectory(res.trajectory)
+                self.tabs.setCurrentIndex(0)
+
+                # Store successful trajectory for 3D viz
+                self.last_trajectory = res.trajectory
+                self.btn_3d.setEnabled(True)
             else:
                 self.text_output.setText(f"FAILED TO FIND SOLUTION: {res.message}")
+                self.btn_3d.setEnabled(False)
 
         except Exception as e:
             self.text_output.setText(f"ERROR: {e}")
 
         finally:
-            self.btn_calc.setText("Calculate Firing Solution")
+            self.btn_calc.setText("Find Firing Solution")
             self.btn_calc.setEnabled(True)
+
+    def view_3d_scene(self):
+        if hasattr(self, 'last_trajectory') and self.last_trajectory is not None:
+            visualize_trajectory_3d(self.last_trajectory)
+
+    def run_monte_carlo(self):
+        self.btn_mc.setText("Running Monte Carlo...")
+        self.btn_mc.setEnabled(False)
+        self.text_output.setText("Running Monte Carlo (Parallel Processing)...")
+        QApplication.processEvents()
+
+        self.populate_project_from_gui()
+        state = self.project.state
+
+        try:
+            # 1. Build Base Solver
+            mass = state["projectile"]["mass_kg"]
+            diam = state["projectile"]["diameter_m"]
+            v0 = state["projectile"]["muzzle_velocity_ms"]
+            spin = state["projectile"]["spin_rate_rads"]
+
+            ix = 0.5 * mass * (diam/2)**2
+            iy = ix * 10.0
+
+            stl_path = state["projectile"].get("custom_stl_path", "")
+            if stl_path and os.path.exists(stl_path):
+                stl_proj = Projectile.from_stl(stl_path, density_kg_m3=11340.0)
+                ix, iy = stl_proj.i_x, stl_proj.i_y
+
+            proj = Projectile(mass=mass, diameter=diam, i_x=ix, i_y=iy)
+            aero = Aerodynamics.g7() if "G7" in state["projectile"]["aero_model"] else Aerodynamics.g1()
+            env_earth = EarthModel()
+
+            wind = WindProfile()
+            w_speed = state["environment"]["wind_speed_ms"]
+            w_dir = state["environment"]["wind_direction_deg"]
+            if w_speed > 0:
+                wind.set_wind_layers_polar([0], [w_speed], [w_dir])
+
+            propulsion = state.get("propulsion", None)
+
+            solver = Solver6DoF(proj, aero, self.current_atm, env_earth, environment_wind=wind, propulsion=propulsion)
+
+            # Base angles (we assume 0 pitch and yaw to measure raw dispersion from a fixed mount,
+            # or the user can manually enter values if they want. For simplicity, we center around 0)
+            base_pitch = 0.0
+            base_yaw = 0.0
+
+            mc = MonteCarloSimulator(solver)
+
+            shots = state["dispersion"]["shots"]
+            plane = state["dispersion"]["plane"]
+            target_dist = state["target"]["x_m"]
+
+            res = mc.run(
+                num_shots=shots,
+                target_plane=plane,
+                target_distance=target_dist,
+                base_v0=v0,
+                base_pitch_rad=base_pitch,
+                base_yaw_rad=base_yaw,
+                base_spin_rads=spin,
+                sd_v0_ms=state["dispersion"]["v0_sd_ms"],
+                sd_mass_kg=state["dispersion"]["mass_sd_kg"],
+                sd_wind_speed_ms=state["dispersion"]["wind_speed_sd_ms"],
+                sd_pitch_rad=np.deg2rad(state["dispersion"]["pitch_sd_deg"]),
+                sd_yaw_rad=np.deg2rad(state["dispersion"]["yaw_sd_deg"])
+            )
+
+            out = f"--- MONTE CARLO RESULTS ({plane.upper()} PLANE) ---\n"
+            out += res.message + "\n"
+            out += f"Mean Point of Impact: [{res.mpi[0]:.2f}m, {res.mpi[1]:.2f}m]\n"
+            out += f"CEP50 (50% Hit Radius): {res.cep_50:.2f} meters\n"
+
+            self.text_output.setText(out)
+
+            if len(res.impacts) > 0:
+                self.canvas_disp.plot_dispersion(res)
+                self.tabs.setCurrentIndex(1)
+
+        except Exception as e:
+            self.text_output.setText(f"ERROR in Monte Carlo: {e}")
+        finally:
+            self.btn_mc.setText("Run Monte Carlo")
+            self.btn_mc.setEnabled(True)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -28,6 +28,21 @@ class BallisticsProject:
                 "x_m": 2500.0,
                 "y_m": 0.0,
                 "z_m": 0.0
+            },
+            "dispersion": {
+                "shots": 50,
+                "plane": "vertical", # 'vertical' or 'horizontal'
+                "v0_sd_ms": 2.0,
+                "mass_sd_kg": 0.01,
+                "wind_speed_sd_ms": 1.0,
+                "pitch_sd_deg": 0.05,
+                "yaw_sd_deg": 0.05
+            },
+            "propulsion": {
+                "active": False,
+                "thrust_n": 1000.0,
+                "burn_time_s": 2.0,
+                "propellant_mass_kg": 2.0
             }
         }
         self.filepath = None
