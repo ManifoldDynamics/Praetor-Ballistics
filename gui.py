@@ -23,6 +23,9 @@ from ballistics.interior_ballistics import GunSystem, Charge
 from ballistics.interior_solver import InteriorSolver
 from ballistics.monte_carlo import MonteCarloSimulator
 from ballistics.viz3d import visualize_trajectory_3d
+from ballistics.explosives import EXPLOSIVES_DATABASE, Explosive
+from ballistics.lethality import FragmentationModel
+from ballistics.raytracer import LethalityRayTracer
 
 class MplCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=8, dpi=100):
@@ -251,6 +254,28 @@ class BallisticsGUI(QMainWindow):
         group_prop.setLayout(form_prop)
         left_layout.addWidget(group_prop)
 
+        # Lethality & Fragmentation Inputs
+        group_leth = QGroupBox("Lethality & Fragmentation")
+        group_leth.setCheckable(True)
+        group_leth.setChecked(False)
+        self.group_leth = group_leth
+        form_leth = QFormLayout()
+        self.combo_exp = QComboBox()
+        self.combo_exp.addItems(list(EXPLOSIVES_DATABASE.keys()))
+        self.input_exp_mass = QLineEdit("5.0")
+        self.input_fragments = QLineEdit("500")
+        self.input_tgt_armor = QLineEdit("10.0")
+        self.btn_load_tgt_stl = QPushButton("Load Target STL...")
+        self.btn_load_tgt_stl.clicked.connect(self.load_target_stl)
+
+        form_leth.addRow("Explosive Type:", self.combo_exp)
+        form_leth.addRow("Explosive Mass (kg):", self.input_exp_mass)
+        form_leth.addRow("Fragment Count:", self.input_fragments)
+        form_leth.addRow("Target Armor (mm):", self.input_tgt_armor)
+        form_leth.addRow("Target Mesh:", self.btn_load_tgt_stl)
+        group_leth.setLayout(form_leth)
+        left_layout.addWidget(group_leth)
+
         # Environment Inputs
         group_env = QGroupBox("Environment")
         form_env = QFormLayout()
@@ -320,10 +345,15 @@ class BallisticsGUI(QMainWindow):
         self.btn_3d.setEnabled(False) # Will enable after a successful calculation
         self.btn_3d.clicked.connect(self.view_3d_scene)
 
+        self.btn_leth = QPushButton("Run Lethality Analysis")
+        self.btn_leth.setStyleSheet("background-color: purple; color: white; font-weight: bold; padding: 10px;")
+        self.btn_leth.clicked.connect(self.run_lethality)
+
         btn_layout.addWidget(self.btn_calc)
         btn_layout.addWidget(self.btn_mc)
         left_layout.addLayout(btn_layout)
         left_layout.addWidget(self.btn_3d)
+        left_layout.addWidget(self.btn_leth)
 
         # We don't add stretch so things compress naturally if window is small
         # Or add scroll area if needed, but it should fit in 800px height.
@@ -407,6 +437,18 @@ class BallisticsGUI(QMainWindow):
         self.input_burn_time.setText(str(pr.get("burn_time_s", 2.0)))
         self.input_prop_mass.setText(str(pr.get("propellant_mass_kg", 2.0)))
 
+        # Lethality
+        l = state.get("lethality", {})
+        self.group_leth.setChecked(l.get("active", False))
+        exp_idx = self.combo_exp.findText(l.get("explosive", "Composition B"))
+        if exp_idx >= 0:
+            self.combo_exp.setCurrentIndex(exp_idx)
+        self.input_exp_mass.setText(str(l.get("explosive_mass_kg", 5.0)))
+        self.input_fragments.setText(str(l.get("fragments", 500)))
+        self.input_tgt_armor.setText(str(l.get("target_armor_mm", 10.0)))
+        if l.get("target_stl"):
+            self.btn_load_tgt_stl.setText(f"Target: {os.path.basename(l['target_stl'])}")
+
     def populate_project_from_gui(self):
         state = self.project.state
         try:
@@ -439,6 +481,12 @@ class BallisticsGUI(QMainWindow):
                 "burn_time_s": float(self.input_burn_time.text()),
                 "propellant_mass_kg": float(self.input_prop_mass.text())
             }
+
+            state["lethality"]["active"] = self.group_leth.isChecked()
+            state["lethality"]["explosive"] = self.combo_exp.currentText()
+            state["lethality"]["explosive_mass_kg"] = float(self.input_exp_mass.text())
+            state["lethality"]["fragments"] = int(self.input_fragments.text())
+            state["lethality"]["target_armor_mm"] = float(self.input_tgt_armor.text())
         except ValueError:
             pass # Ignore conversion errors when typing
 
@@ -490,6 +538,12 @@ class BallisticsGUI(QMainWindow):
                 self.project.state["projectile"]["custom_stl_path"] = filepath
             except Exception as e:
                 self.text_output.setText(f"Failed to load STL: {e}")
+
+    def load_target_stl(self):
+        filepath, _ = QFileDialog.getOpenFileName(self, "Load Target STL", "", "STL Files (*.stl)")
+        if filepath:
+            self.project.state["lethality"]["target_stl"] = filepath
+            self.btn_load_tgt_stl.setText(f"Target: {os.path.basename(filepath)}")
 
     def fetch_weather(self):
         self.weather_status.setText("Fetching...")
@@ -645,6 +699,110 @@ class BallisticsGUI(QMainWindow):
     def view_3d_scene(self):
         if hasattr(self, 'last_trajectory') and self.last_trajectory is not None:
             visualize_trajectory_3d(self.last_trajectory)
+
+    def run_lethality(self):
+        self.btn_leth.setText("Running Ray-Tracer...")
+        self.btn_leth.setEnabled(False)
+        self.text_output.setText("Calculating Fragmentation and Intercept...")
+        QApplication.processEvents()
+
+        self.populate_project_from_gui()
+        state = self.project.state
+
+        try:
+            if not state["lethality"]["target_stl"]:
+                raise ValueError("A Target STL mesh must be loaded for lethality analysis.")
+
+            # We need a firing solution first to get terminal parameters
+            # Reusing the setup logic
+            mass = state["projectile"]["mass_kg"]
+            diam = state["projectile"]["diameter_m"]
+            v0 = state["projectile"]["muzzle_velocity_ms"]
+            spin = state["projectile"]["spin_rate_rads"]
+
+            ix = 0.5 * mass * (diam/2)**2
+            iy = ix * 10.0
+
+            proj = Projectile(mass=mass, diameter=diam, i_x=ix, i_y=iy)
+            aero = Aerodynamics.g7() if "G7" in state["projectile"]["aero_model"] else Aerodynamics.g1()
+            env_earth = EarthModel()
+
+            wind = WindProfile()
+            w_speed = state["environment"]["wind_speed_ms"]
+            w_dir = state["environment"]["wind_direction_deg"]
+            if w_speed > 0:
+                wind.set_wind_layers_polar([0], [w_speed], [w_dir])
+
+            propulsion = state.get("propulsion", None)
+            solver = Solver6DoF(proj, aero, self.current_atm, env_earth, environment_wind=wind, propulsion=propulsion)
+            targeting = TargetingSystem(solver)
+
+            tx = state["target"]["x_m"]
+            ty = state["target"]["y_m"]
+            tz = state["target"]["z_m"]
+
+            res = targeting.find_firing_solution([tx, ty, tz], v0, spin)
+
+            if not res.success:
+                raise Exception(f"Failed to find intercept solution: {res.message}")
+
+            # Now we have the intercept. Setup Lethality.
+            exp_name = state["lethality"]["explosive"]
+            exp_mass = state["lethality"]["explosive_mass_kg"]
+            num_frags = state["lethality"]["fragments"]
+            tgt_armor = state["lethality"]["target_armor_mm"]
+
+            exp_data = Explosive(exp_name)
+            metal_mass = mass - exp_mass
+
+            if metal_mass <= 0:
+                raise ValueError("Explosive mass cannot exceed total projectile mass.")
+
+            g_vel = FragmentationModel.gurney_velocity(exp_mass, metal_mass, exp_data.gurney_constant)
+            frag_props = FragmentationModel.generate_fragments(metal_mass, num_frags)
+            spray_vecs = FragmentationModel.spray_vectors(num_frags, g_vel)
+
+            tracer = LethalityRayTracer(state["lethality"]["target_stl"], [tx, ty, tz], tgt_armor)
+
+            # terminal pos and velocity
+            term_pos = res.trajectory.y[0:3, -1]
+            term_vel = res.trajectory.y[3:6, -1]
+            term_quat = res.trajectory.y[6:10, -1]
+
+            leth_res = tracer.analyze_lethality(term_pos, term_vel, term_quat, frag_props["mass_kg"], frag_props["diameter_m"], spray_vecs)
+
+            out = "--- LETHALITY ANALYSIS ---\n"
+            out += f"Explosive: {exp_name} ({exp_mass}kg)\n"
+            out += f"Gurney Velocity: {g_vel:.1f} m/s\n"
+            out += f"Total Fragments Generated: {leth_res.total_fragments}\n"
+            out += f"Fragments Hit Target: {leth_res.hit_count}\n"
+            out += f"Fragments Penetrated: {leth_res.penetration_count} (> {tgt_armor}mm RHA)\n"
+            self.text_output.setText(out)
+
+            # Visualize
+            self.last_lethality_result = leth_res
+            import pyvista as pv
+            plotter = pv.Plotter(title="PRODAS-Killer Lethality Analysis")
+            plotter.add_mesh(tracer.mesh, color="gray", opacity=0.5, label="Target Mesh")
+            if leth_res.hit_count > 0:
+                # Plot hits
+                hits_pcc = pv.PolyData(leth_res.hit_points)
+                plotter.add_mesh(hits_pcc, color="yellow", point_size=10, render_points_as_spheres=True, label="Bounced")
+            if leth_res.penetration_count > 0:
+                pen_pcc = pv.PolyData(leth_res.penetrated_points)
+                plotter.add_mesh(pen_pcc, color="red", point_size=15, render_points_as_spheres=True, label="Penetrated")
+
+            # Plot blast origin
+            plotter.add_mesh(pv.Sphere(radius=0.5, center=term_pos), color="orange", label="Detonation")
+            plotter.add_axes()
+            plotter.add_legend()
+            plotter.show()
+
+        except Exception as e:
+            self.text_output.setText(f"ERROR in Lethality: {e}")
+        finally:
+            self.btn_leth.setText("Run Lethality Analysis")
+            self.btn_leth.setEnabled(True)
 
     def run_monte_carlo(self):
         self.btn_mc.setText("Running Monte Carlo...")

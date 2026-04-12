@@ -10,6 +10,7 @@ A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine written
 - **PyVista 3D Visualization**: Renders stunning, interactive 3D flight paths of the simulated trajectory directly from the GUI.
 - **Monte Carlo Dispersion**: Simulates $N$ parallel shots utilizing Python `multiprocessing` to introduce variance into projectile mass, muzzle velocity, wind speed, and firing angles, calculating the resulting Circular Error Probable (CEP) and Mean Point of Impact (MPI).
 - **Targeting & Zeroing System**: Iteratively solves for the exact Elevation (Pitch) and Azimuth (Yaw) required to intercept a specific 3D coordinate, taking into account spin drift, Coriolis effect, and aerodynamic drop.
+- **Lethality & Ray-Tracing**: Computes warhead fragmentation using the Gurney equations and casts hundreds of individual fragments against a 3D Target STL using `trimesh` ray-tracing to calculate hit probability and armor penetration for each fragment.
 - **Terminal Ballistics**: Includes standard empirical armor penetration formulas (`De Marre`, `Krupp`, `Lanz-Odermatt` for APFSDS) to estimate lethality against armor upon target impact.
 - **Environmental Modeling**: Uses standard models for Earth's gravity (with altitude decay), Coriolis effect, and atmospheric properties. Supports custom weather baselines (accounting for humidity via Virtual Temperature) and **Live Weather Fetching** using coordinates.
 - **Advanced Wind Profiles**: Support for 3D vector wind fields, allowing definition of custom layered crosswinds (by speed/azimuth or Cartesian vectors) that smoothly interpolate across altitude bands.
@@ -32,7 +33,7 @@ pip install -r requirements.txt
 
 ## Desktop GUI
 
-The easiest way to interact with the engine is via the built-in PyQt6 graphical user interface. This provides a split-pane layout to configure interior thermodynamics (propellant type, barrel length), download live weather via GPS coordinates, set target parameters, and calculate the exact firing solution while instantly plotting the 3D trajectory profiles. It also features a dedicated **Monte Carlo Dispersion tab** to visualize your weapon system's CEP hit-probability envelope natively.
+The easiest way to interact with the engine is via the built-in PyQt6 graphical user interface. This provides a split-pane layout to configure interior thermodynamics (propellant type, barrel length), download live weather via GPS coordinates, set target parameters, and calculate the exact firing solution while instantly plotting the 3D trajectory profiles. It also features a dedicated **Monte Carlo Dispersion tab** to visualize your weapon system's CEP hit-probability envelope, and a **Lethality Analysis** module that utilizes PyVista to pop up a 3D visualization of explosive fragments impacting an STL target.
 
 ```bash
 python gui.py

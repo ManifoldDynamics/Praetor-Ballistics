@@ -43,6 +43,14 @@ class BallisticsProject:
                 "thrust_n": 1000.0,
                 "burn_time_s": 2.0,
                 "propellant_mass_kg": 2.0
+            },
+            "lethality": {
+                "active": False,
+                "explosive": "Composition B",
+                "explosive_mass_kg": 5.0,
+                "target_stl": "",
+                "target_armor_mm": 10.0,
+                "fragments": 500
             }
         }
         self.filepath = None

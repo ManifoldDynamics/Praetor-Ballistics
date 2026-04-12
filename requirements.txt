@@ -6,3 +6,4 @@ requests
 trimesh
 PyQt6
 pyvista
+rtree
