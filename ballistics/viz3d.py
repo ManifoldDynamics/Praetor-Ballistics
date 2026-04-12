@@ -19,7 +19,7 @@ def visualize_trajectory_3d(sol, projectile_stl_path=None):
     points = np.column_stack((x, y, z))
 
     # Create the PyVista plotter
-    plotter = pv.Plotter(title="PRODAS-Killer 3D Trajectory Viewer")
+    plotter = pv.Plotter(title="Wilson Ballistic Suite - 3D Trajectory Viewer")
 
     # Create a spline representing the flight path
     spline = pv.Spline(points, len(points))

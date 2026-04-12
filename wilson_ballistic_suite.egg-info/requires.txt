@@ -1,10 +1,11 @@
 numpy
 scipy
-pytest
 matplotlib
 requests
 trimesh
-PyQt6
-pyvista
 rtree
-pybind11
+pyvista
+PyQt6
+
+[dev]
+pytest

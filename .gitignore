@@ -3,3 +3,8 @@ __pycache__/
 trajectory_output.csv
 test_bullet.stl
 virtual_tank.stl
+*.so
+*.pyd
+*.egg-info/
+build/
+dist/

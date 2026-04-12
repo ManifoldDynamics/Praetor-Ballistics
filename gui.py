@@ -132,7 +132,7 @@ import matplotlib.pyplot as plt
 class BallisticsGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PRODAS-Killer: 6-DoF Ballistics Engine")
+        self.setWindowTitle("Wilson Ballistic Suite (WBS)")
         self.resize(1200, 800)
 
         self.project = BallisticsProject()
@@ -229,12 +229,12 @@ class BallisticsGUI(QMainWindow):
         layout = QVBoxLayout(menu_widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        title = QLabel("PRODAS-KILLER")
+        title = QLabel("WILSON BALLISTIC SUITE")
         title.setStyleSheet("font-size: 36px; font-weight: bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        subtitle = QLabel("Deep Physics 6-DoF Ballistics Engine")
+        subtitle = QLabel("Next-Generation 6-DoF Ballistics & Lethality Engine")
         subtitle.setStyleSheet("font-size: 18px; color: gray; margin-bottom: 40px;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
@@ -597,7 +597,7 @@ class BallisticsGUI(QMainWindow):
         self.project = BallisticsProject()
         self.populate_gui_from_project()
         self.stacked_widget.setCurrentIndex(1)
-        self.setWindowTitle("PRODAS-Killer - New Project")
+        self.setWindowTitle("Wilson Ballistic Suite - New Project")
 
     def open_project(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "Open Ballistics Project", "", "Ballistics Project (*.blst);;JSON Files (*.json);;All Files (*)")
@@ -607,7 +607,7 @@ class BallisticsGUI(QMainWindow):
                 self.project.load(filepath)
                 self.populate_gui_from_project()
                 self.stacked_widget.setCurrentIndex(1)
-                self.setWindowTitle(f"PRODAS-Killer - {os.path.basename(filepath)}")
+                self.setWindowTitle(f"Wilson Ballistic Suite - {os.path.basename(filepath)}")
             except Exception as e:
                 self.text_output.setText(f"Error loading project: {e}")
 
@@ -626,7 +626,7 @@ class BallisticsGUI(QMainWindow):
                 filepath += ".blst"
             self.populate_project_from_gui()
             self.project.save(filepath)
-            self.setWindowTitle(f"PRODAS-Killer - {os.path.basename(filepath)}")
+            self.setWindowTitle(f"Wilson Ballistic Suite - {os.path.basename(filepath)}")
             self.text_output.setText(f"Saved to {filepath}")
 
     def load_stl(self):
@@ -944,7 +944,7 @@ class BallisticsGUI(QMainWindow):
             # Visualize
             self.last_lethality_result = leth_res
             import pyvista as pv
-            plotter = pv.Plotter(title="PRODAS-Killer Lethality Analysis")
+            plotter = pv.Plotter(title="Wilson Ballistic Suite - Lethality Analysis")
             plotter.add_mesh(tracer.mesh, color="gray", opacity=0.5, label="Target Mesh")
             if leth_res.hit_count > 0:
                 # Plot hits

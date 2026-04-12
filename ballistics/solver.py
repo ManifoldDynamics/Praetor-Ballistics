@@ -13,6 +13,8 @@ class Solver6DoF:
         self.propulsion = propulsion
 
     def solve(self, t_span, initial_position, initial_velocity, initial_pitch, initial_yaw, spin_rate, max_step=0.01, custom_events=None):
+        import numpy as np
+
         if np.isscalar(initial_velocity):
             vx = initial_velocity * np.cos(initial_pitch) * np.cos(initial_yaw)
             vy = initial_velocity * np.cos(initial_pitch) * np.sin(initial_yaw)
@@ -62,8 +64,102 @@ class Solver6DoF:
             else:
                 events.append(custom_events)
 
+        # Attempt to use C++ Core if available for maximum performance
+        try:
+            import wbs_core
+            use_cpp = True
+        except ImportError:
+            use_cpp = False
+
+        import numpy as np
+
+        # Pre-extract Aerodynamics tables for C++
+        if use_cpp:
+            # C++ expects mach_array and corresponding coeff_arrays
+            # If the user passed a constant/function, we evaluate it over a generic Mach range to create a lookup table for C++
+            if hasattr(self.aero._cd_func, 'x') and hasattr(self.aero._cd_func, 'y'):
+                aero_machs = self.aero._cd_func.x
+            else:
+                aero_machs = np.linspace(0.0, 10.0, 50)
+
+            def _get_array(func):
+                if hasattr(func, 'y') and hasattr(func, 'x') and np.array_equal(func.x, aero_machs):
+                    return func.y
+                else:
+                    return np.array([func(m) for m in aero_machs])
+
+            self._cpp_machs = aero_machs
+            self._cpp_cds = _get_array(self.aero._cd_func)
+            self._cpp_cls = _get_array(self.aero._cl_func)
+            self._cpp_cmas = _get_array(self.aero._cma_func)
+            self._cpp_cmaqs = _get_array(self.aero._cmaq_func)
+            self._cpp_cnlps = _get_array(self.aero._cnlp_func)
+            self._cpp_cmags = _get_array(self.aero._cmag_func)
+
         def eom_wrapper(t, y):
-            return get_eom(t, y, self.projectile, self.aero, self.env_atm, self.env_earth, self.env_wind, self.latitude_rad, self.propulsion)
+            if use_cpp:
+                # Prepare arguments for C++
+                pos = y[0:3]
+                altitude = pos[2]
+
+                # Atmosphere baseline
+                T0 = self.env_atm.T0
+                P0 = self.env_atm.P0
+                L = self.env_atm.L
+                R = self.env_atm.R
+                G_atm = self.env_atm.G
+                RH = self.env_atm.RH
+
+                # Earth baseline
+                G0 = self.env_earth.G0
+                R_EARTH = self.env_earth.R_EARTH
+                OMEGA = self.env_earth.OMEGA
+
+                # Wind
+                wind_vx, wind_vy, wind_vz = 0.0, 0.0, 0.0
+                if self.env_wind is not None:
+                    # To keep C++ fast, we just grab the wind at the current altitude
+                    w = self.env_wind.get_wind(altitude)
+                    wind_vx, wind_vy, wind_vz = w[0], w[1], w[2]
+
+                # Propulsion
+                p_act = False
+                p_t = 0.0
+                p_b = 0.0
+                p_m = 0.0
+                if self.propulsion is not None and self.propulsion.get('active', False):
+                    p_act = True
+                    p_t = self.propulsion.get('thrust_n', 0.0)
+                    p_b = self.propulsion.get('burn_time_s', 0.0)
+                    p_m = self.propulsion.get('propellant_mass_kg', 0.0)
+
+                # Hypersonics
+                h_act = False
+                mat_density = 0.0
+                mat_cp = 0.0
+                mat_eps = 0.0
+                if hasattr(self.projectile, 'material') and self.projectile.material is not None:
+                    h_act = True
+                    mat_density = self.projectile.material.density
+                    mat_cp = self.projectile.material.specific_heat
+                    mat_eps = self.projectile.material.emissivity
+
+                nose_rad = getattr(self.projectile, 'nose_radius_m', 0.001)
+
+                return wbs_core.get_eom(
+                    t, y,
+                    self.projectile.mass, self.projectile.diameter, self.projectile.reference_area,
+                    self.projectile.i_x, self.projectile.i_y,
+                    T0, P0, L, R, G_atm, RH,
+                    G0, R_EARTH, OMEGA, self.latitude_rad,
+                    self._cpp_machs, self._cpp_cds, self._cpp_cls,
+                    self._cpp_cmas, self._cpp_cmaqs, self._cpp_cnlps, self._cpp_cmags,
+                    wind_vx, wind_vy, wind_vz,
+                    p_act, p_t, p_b, p_m,
+                    h_act, mat_density, mat_cp, mat_eps, nose_rad
+                )
+            else:
+                return get_eom(t, y, self.projectile, self.aero, self.env_atm, self.env_earth, self.env_wind, self.latitude_rad, self.propulsion)
 
         sol = solve_ivp(
             eom_wrapper,
