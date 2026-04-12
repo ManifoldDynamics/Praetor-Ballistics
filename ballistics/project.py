@@ -27,7 +27,10 @@ class BallisticsProject:
             "target": {
                 "x_m": 2500.0,
                 "y_m": 0.0,
-                "z_m": 0.0
+                "z_m": 0.0,
+                "vx_ms": 0.0,
+                "vy_ms": 0.0,
+                "vz_ms": 0.0
             },
             "dispersion": {
                 "shots": 50,
@@ -56,6 +59,12 @@ class BallisticsProject:
                 "active": False,
                 "material": "Tungsten (WHA)",
                 "nose_radius_m": 0.01
+            },
+            "guidance": {
+                "active": False,
+                "nav_constant": 4.0,
+                "max_g": 30.0,
+                "activation_time_s": 0.5
             }
         }
         self.filepath = None

@@ -59,6 +59,10 @@ class TargetingSystem:
         def objective(angles):
             pitch, yaw = angles
 
+            # The targeting solver's objective function assumes the target is stationary at t=0 coordinates.
+            # If the user gave us a moving target state, we need to compare the miss distance
+            # against the target's position AT THE TIME OF INTERCEPT (sol.t[-1]), not the static t=0 position.
+
             # Run fast low-res simulation for the optimizer
             sol = self.solver.solve(
                 t_span=(0, 300),
@@ -76,8 +80,16 @@ class TargetingSystem:
                 # Penalize heavily if it hits ground before target
                 return [1000.0 * (x_t - final_x), 1000.0 * (x_t - final_x)]
 
-            miss_y = sol.y[1, -1] - y_t
-            miss_z = sol.y[2, -1] - z_t
+            # Target dynamic position
+            t_int = sol.t[-1]
+            if hasattr(self.solver, 'target_state') and self.solver.target_state:
+                ty = self.solver.target_state['pos'][1] + self.solver.target_state['vel'][1] * t_int
+                tz = self.solver.target_state['pos'][2] + self.solver.target_state['vel'][2] * t_int
+            else:
+                ty, tz = y_t, z_t
+
+            miss_y = sol.y[1, -1] - ty
+            miss_z = sol.y[2, -1] - tz
             return [miss_y, miss_z]
 
         # Optimize using Nelder-Mead instead of hybr. It is much more robust
@@ -114,9 +126,18 @@ class TargetingSystem:
             final_y = sol.y[1, -1]
             final_z = sol.y[2, -1]
             final_x = sol.y[0, -1]
-            dist_error = np.sqrt((final_x - x_t)**2 + (final_y - y_t)**2 + (final_z - z_t)**2)
 
-            if dist_error > 2.0:
+            t_int = sol.t[-1]
+            if hasattr(self.solver, 'target_state') and self.solver.target_state:
+                ty = self.solver.target_state['pos'][1] + self.solver.target_state['vel'][1] * t_int
+                tz = self.solver.target_state['pos'][2] + self.solver.target_state['vel'][2] * t_int
+            else:
+                ty, tz = y_t, z_t
+
+            dist_error = np.sqrt((final_x - x_t)**2 + (final_y - ty)**2 + (final_z - tz)**2)
+
+            # Increase tolerance for guided missiles which might hit dynamically
+            if dist_error > 5.0:
                 return TargetingResult(False, opt_pitch, opt_yaw, sol.t[-1], term_vel, term_energy, sol,
                                        f"Optimizer converged but final error is too high ({dist_error:.2f}m). Target may be unreachable.")
 

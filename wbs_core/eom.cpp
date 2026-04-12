@@ -109,7 +109,12 @@ py::array_t<double> get_eom_cpp(
     bool prop_active, double prop_thrust_n, double prop_burn_time_s, double prop_mass_kg,
 
     // Hypersonics
-    bool hyper_active, double mat_density, double mat_cp, double mat_eps, double nose_rad
+    bool hyper_active, double mat_density, double mat_cp, double mat_eps, double nose_rad,
+
+    // Guidance
+    bool guide_active, double nav_const, double max_g, double guide_activate_t,
+    double tgt_pos_x, double tgt_pos_y, double tgt_pos_z,
+    double tgt_vel_x, double tgt_vel_y, double tgt_vel_z
 ) {
 
     auto state = state_arr.unchecked<1>();
@@ -262,6 +267,51 @@ py::array_t<double> get_eom_cpp(
         (C_n + C_n_mag) * q_dyn * S * d
     };
 
+    // Active Guidance
+    double F_guide_earth[3] = {0.0, 0.0, 0.0};
+    if (guide_active && t >= guide_activate_t) {
+        double m_p[3] = {pos[0], pos[1], pos[2]};
+        double m_v[3] = {vel[0], vel[1], vel[2]};
+        double t_p[3] = {tgt_pos_x + tgt_vel_x*t, tgt_pos_y + tgt_vel_y*t, tgt_pos_z + tgt_vel_z*t};
+        double t_v[3] = {tgt_vel_x, tgt_vel_y, tgt_vel_z};
+
+        double r[3] = {t_p[0]-m_p[0], t_p[1]-m_p[1], t_p[2]-m_p[2]};
+        double r_mag = norm3(r);
+
+        if (r_mag >= 1.0) {
+            double r_hat[3] = {r[0]/r_mag, r[1]/r_mag, r[2]/r_mag};
+            double v_rel[3] = {t_v[0]-m_v[0], t_v[1]-m_v[1], t_v[2]-m_v[2]};
+
+            double v_c = -(v_rel[0]*r_hat[0] + v_rel[1]*r_hat[1] + v_rel[2]*r_hat[2]);
+
+            if (v_c >= 0.0) {
+                double r_cross_vrel[3];
+                cross_product(r, v_rel, r_cross_vrel);
+
+                double omega_los[3] = {r_cross_vrel[0]/(r_mag*r_mag), r_cross_vrel[1]/(r_mag*r_mag), r_cross_vrel[2]/(r_mag*r_mag)};
+
+                double a_cmd_earth[3];
+                cross_product(omega_los, r_hat, a_cmd_earth);
+                a_cmd_earth[0] *= (nav_const * v_c);
+                a_cmd_earth[1] *= (nav_const * v_c);
+                a_cmd_earth[2] *= (nav_const * v_c);
+
+                double a_mag = norm3(a_cmd_earth);
+                double max_a = max_g * 9.80665;
+
+                if (a_mag > max_a) {
+                    a_cmd_earth[0] *= (max_a / a_mag);
+                    a_cmd_earth[1] *= (max_a / a_mag);
+                    a_cmd_earth[2] *= (max_a / a_mag);
+                }
+
+                F_guide_earth[0] = m * a_cmd_earth[0];
+                F_guide_earth[1] = m * a_cmd_earth[1];
+                F_guide_earth[2] = m * a_cmd_earth[2];
+            }
+        }
+    }
+
     double C_Y_mag = cnlp * p_hat * alpha_approx;
     double C_Z_mag = -cnlp * p_hat * beta_approx;
 
@@ -289,9 +339,9 @@ py::array_t<double> get_eom_cpp(
     double F_coriolis_earth[3] = {-2.0 * m * a_coriolis[0], -2.0 * m * a_coriolis[1], -2.0 * m * a_coriolis[2]};
 
     double accel[3] = {
-        (F_drag_earth[0] + F_lift_earth[0] + F_thrust_earth[0] + F_gravity_earth[0] + F_coriolis_earth[0]) / m,
-        (F_drag_earth[1] + F_lift_earth[1] + F_thrust_earth[1] + F_gravity_earth[1] + F_coriolis_earth[1]) / m,
-        (F_drag_earth[2] + F_lift_earth[2] + F_thrust_earth[2] + F_gravity_earth[2] + F_coriolis_earth[2]) / m
+        (F_drag_earth[0] + F_lift_earth[0] + F_thrust_earth[0] + F_guide_earth[0] + F_gravity_earth[0] + F_coriolis_earth[0]) / m,
+        (F_drag_earth[1] + F_lift_earth[1] + F_thrust_earth[1] + F_guide_earth[1] + F_gravity_earth[1] + F_coriolis_earth[1]) / m,
+        (F_drag_earth[2] + F_lift_earth[2] + F_thrust_earth[2] + F_guide_earth[2] + F_gravity_earth[2] + F_coriolis_earth[2]) / m
     };
 
     // 7. Rigid Body Dynamics (Euler Equations)

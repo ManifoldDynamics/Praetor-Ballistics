@@ -388,16 +388,37 @@ class BallisticsGUI(QMainWindow):
         left_layout.addWidget(group_env)
 
         # Target Inputs
-        group_target = QGroupBox("Targeting System")
+        group_target = QGroupBox("Targeting System (Intercept)")
         form_target = QFormLayout()
         self.input_tx = QLineEdit()
         self.input_ty = QLineEdit()
         self.input_tz = QLineEdit()
-        form_target.addRow("Target X (m):", self.input_tx)
-        form_target.addRow("Target Y (m):", self.input_ty)
-        form_target.addRow("Target Z (m):", self.input_tz)
+        self.input_tvx = QLineEdit()
+        self.input_tvy = QLineEdit()
+        self.input_tvz = QLineEdit()
+        form_target.addRow("Target Pos X (m):", self.input_tx)
+        form_target.addRow("Target Pos Y (m):", self.input_ty)
+        form_target.addRow("Target Pos Z (m):", self.input_tz)
+        form_target.addRow("Target Vel X (m/s):", self.input_tvx)
+        form_target.addRow("Target Vel Y (m/s):", self.input_tvy)
+        form_target.addRow("Target Vel Z (m/s):", self.input_tvz)
         group_target.setLayout(form_target)
         left_layout.addWidget(group_target)
+
+        # Guidance Inputs
+        group_guide = QGroupBox("Proportional Navigation Guidance")
+        group_guide.setCheckable(True)
+        group_guide.setChecked(False)
+        self.group_guide = group_guide
+        form_guide = QFormLayout()
+        self.input_nav_k = QLineEdit("4.0")
+        self.input_max_g = QLineEdit("30.0")
+        self.input_guide_delay = QLineEdit("0.5")
+        form_guide.addRow("Navigation Constant (N):", self.input_nav_k)
+        form_guide.addRow("Max Lateral Accel (G):", self.input_max_g)
+        form_guide.addRow("Activation Delay (s):", self.input_guide_delay)
+        group_guide.setLayout(form_guide)
+        left_layout.addWidget(group_guide)
 
         # Dispersion Inputs
         group_disp = QGroupBox("Monte Carlo Dispersion (Std Dev)")
@@ -508,6 +529,16 @@ class BallisticsGUI(QMainWindow):
         self.input_tx.setText(str(t.get("x_m", 2500.0)))
         self.input_ty.setText(str(t.get("y_m", 0.0)))
         self.input_tz.setText(str(t.get("z_m", 0.0)))
+        self.input_tvx.setText(str(t.get("vx_ms", 0.0)))
+        self.input_tvy.setText(str(t.get("vy_ms", 0.0)))
+        self.input_tvz.setText(str(t.get("vz_ms", 0.0)))
+
+        # Guidance
+        g = state.get("guidance", {})
+        self.group_guide.setChecked(g.get("active", False))
+        self.input_nav_k.setText(str(g.get("nav_constant", 4.0)))
+        self.input_max_g.setText(str(g.get("max_g", 30.0)))
+        self.input_guide_delay.setText(str(g.get("activation_time_s", 0.5)))
 
         # Dispersion
         d = state.get("dispersion", {})
@@ -565,6 +596,16 @@ class BallisticsGUI(QMainWindow):
             state["target"]["x_m"] = float(self.input_tx.text())
             state["target"]["y_m"] = float(self.input_ty.text())
             state["target"]["z_m"] = float(self.input_tz.text())
+            state["target"]["vx_ms"] = float(self.input_tvx.text())
+            state["target"]["vy_ms"] = float(self.input_tvy.text())
+            state["target"]["vz_ms"] = float(self.input_tvz.text())
+
+            state["guidance"] = {
+                "active": self.group_guide.isChecked(),
+                "nav_constant": float(self.input_nav_k.text()),
+                "max_g": float(self.input_max_g.text()),
+                "activation_time_s": float(self.input_guide_delay.text())
+            }
 
             state["dispersion"]["shots"] = int(self.input_shots.text())
             state["dispersion"]["v0_sd_ms"] = float(self.input_sd_v0.text())
@@ -896,12 +937,24 @@ class BallisticsGUI(QMainWindow):
                 wind.set_wind_layers_polar([0], [w_speed], [w_dir])
 
             propulsion = state.get("propulsion", None)
-            solver = Solver6DoF(proj, aero, self.current_atm, env_earth, environment_wind=wind, propulsion=propulsion)
-            targeting = TargetingSystem(solver)
+
+            from ballistics.guidance import ProportionalNavigation
+            guidance = None
+            if state.get("guidance", {}).get("active", False):
+                g = state["guidance"]
+                guidance = ProportionalNavigation(g["nav_constant"], g["max_g"], g["activation_time_s"])
 
             tx = state["target"]["x_m"]
             ty = state["target"]["y_m"]
             tz = state["target"]["z_m"]
+            tvx = state["target"].get("vx_ms", 0.0)
+            tvy = state["target"].get("vy_ms", 0.0)
+            tvz = state["target"].get("vz_ms", 0.0)
+
+            target_state = {'pos': [tx, ty, tz], 'vel': [tvx, tvy, tvz]}
+
+            solver = Solver6DoF(proj, aero, self.current_atm, env_earth, environment_wind=wind, propulsion=propulsion, guidance=guidance, target_state=target_state)
+            targeting = TargetingSystem(solver)
 
             res = targeting.find_firing_solution([tx, ty, tz], v0, spin)
 
@@ -1002,7 +1055,22 @@ class BallisticsGUI(QMainWindow):
 
             propulsion = state.get("propulsion", None)
 
-            solver = Solver6DoF(proj, aero, self.current_atm, env_earth, environment_wind=wind, propulsion=propulsion)
+            from ballistics.guidance import ProportionalNavigation
+            guidance = None
+            if state.get("guidance", {}).get("active", False):
+                g = state["guidance"]
+                guidance = ProportionalNavigation(g["nav_constant"], g["max_g"], g["activation_time_s"])
+
+            tx = state["target"]["x_m"]
+            ty = state["target"]["y_m"]
+            tz = state["target"]["z_m"]
+            tvx = state["target"].get("vx_ms", 0.0)
+            tvy = state["target"].get("vy_ms", 0.0)
+            tvz = state["target"].get("vz_ms", 0.0)
+
+            target_state = {'pos': [tx, ty, tz], 'vel': [tvx, tvy, tvz]}
+
+            solver = Solver6DoF(proj, aero, self.current_atm, env_earth, environment_wind=wind, propulsion=propulsion, guidance=guidance, target_state=target_state)
 
             # Base angles (we assume 0 pitch and yaw to measure raw dispersion from a fixed mount,
             # or the user can manually enter values if they want. For simplicity, we center around 0)

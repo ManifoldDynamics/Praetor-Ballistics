@@ -77,12 +77,14 @@ def quaternion_to_euler(q):
 
 from ballistics.aerothermodynamics import HypersonicHeating
 
-def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0, propulsion=None):
+def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None):
     """
     propulsion: None, or a dict containing:
       - 'thrust_n': Thrust in Newtons
       - 'burn_time_s': Duration of motor burn
       - 'propellant_mass_kg': Mass expelled during burn
+    guidance: An instance of ProportionalNavigation, or None
+    target_state: dict {'pos': [x,y,z], 'vel': [vx,vy,vz]} representing the target at t=0
     """
     pos = state[0:3]
     vel = state[3:6] # Inertial velocity
@@ -188,6 +190,20 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
 
     M_aero_body = np.array([C_l, C_m + C_m_mag, C_n + C_n_mag]) * q_dyn * S * d
 
+    # Active Guidance Control (Thrust Vectoring / Divert Thrusters)
+    # We apply the commanded lateral acceleration directly to the Earth frame
+    # to simulate a highly responsive guidance system.
+    F_guide_earth = np.zeros(3)
+
+    if guidance is not None and target_state is not None:
+        t_pos = np.array(target_state['pos']) + np.array(target_state['vel']) * t
+        t_vel = np.array(target_state['vel'])
+
+        a_cmd_earth = guidance.get_commanded_acceleration(t, pos, vel, t_pos, t_vel)
+
+        # F = m * a
+        F_guide_earth = m * a_cmd_earth
+
     # Magnus Force (Spin drift)
     # acts mutually perpendicular to velocity vector and spin axis.
     # C_Y_mag = cnlp * (pd/2V) * alpha
@@ -224,7 +240,7 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     F_gravity_earth = np.array([0, 0, -g * m])
     F_coriolis_earth = m * env_earth.coriolis_acceleration(vel, latitude_rad)
 
-    F_total_earth = F_drag_earth + F_lift_earth + F_thrust_earth + F_gravity_earth + F_coriolis_earth
+    F_total_earth = F_drag_earth + F_lift_earth + F_thrust_earth + F_guide_earth + F_gravity_earth + F_coriolis_earth
 
     accel = F_total_earth / m
 

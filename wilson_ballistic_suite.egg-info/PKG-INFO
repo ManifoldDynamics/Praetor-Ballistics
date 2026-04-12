@@ -17,12 +17,13 @@ Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
 Dynamic: license-file
 
-# Ballistics Engine
+# Wilson Ballistic Suite (WBS)
 
-A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine written in Python. This package aims to simulate realistic projectile trajectories, matching the fidelity of industry-standard tools like PRODAS.
+A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine utilizing a high-performance C++ backend. This suite simulates incredibly realistic projectile trajectories, lethality, and aerothermodynamics, designed as a modern next-generation alternative to industry-standard tools.
 
 ## Features
 
+- **High-Performance C++ Core**: The heavy differential equation derivatives are evaluated using a natively compiled C++ extension (`wbs_core`), connected via PyBind11. This allows computationally intensive tasks (like 1,000-shot Monte Carlo simulations and multi-variable Targeting) to run orders of magnitude faster than pure Python.
 - **6-DoF Physics Solver**: Solves the complete equations of motion over time using Runge-Kutta integration, accurately modeling a rigid body's translation and rotation.
 - **Interior Ballistics Thermodynamics**: Solves lumped-parameter thermodynamic differential equations (like STANAG 4367) to calculate the pressure curve, burn fraction, and muzzle velocity of a projectile based on chamber volume, barrel length, charge mass, and propellant type. Includes a database of standard energetic materials.
 - **Active Propulsion**: Supports modeling rocket-assisted projectiles (RAP) or missiles via configurable thrust vectors and time-varying mass loss curves.
@@ -43,13 +44,15 @@ A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine written
 
 ## Installation
 
+WBS utilizes a hybrid C++/Python architecture. `setuptools` and `pybind11` will automatically compile the core C++ extension when you install the package. Ensure you have a standard C++11 compiler installed on your system (like GCC or MSVC). If compilation fails, the system will still work but will automatically fall back to the slower pure Python solver.
+
 ```bash
 # Clone the repository
 git clone <repo-url>
 cd ballistics
 
-# Install requirements
-pip install -r requirements.txt
+# Install WBS locally (compiles the C++ core automatically)
+pip install -e .
 ```
 
 ## Desktop GUI

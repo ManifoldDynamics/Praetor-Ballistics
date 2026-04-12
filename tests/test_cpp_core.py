@@ -65,9 +65,6 @@ def test_cpp_vs_python_parity():
     res_py = get_eom(t, state, proj, aero, env_atm, env_earth, wind, 0.0, propulsion)
 
     # 5. Run C++ EOM
-    # For testing C++, we need to use private _func tables if using default models,
-    # but the solver wrapper expects the user of C++ to have tables.
-    # The G7 aero object has `_cd_func` which holds the interp1d object.
     res_cpp = wbs_core.get_eom(
         t, state,
         proj.mass, proj.diameter, proj.reference_area,
@@ -78,7 +75,8 @@ def test_cpp_vs_python_parity():
         aero._cma_func.y, aero._cmaq_func.y, aero._cnlp_func.y, aero._cmag_func.y,
         5.0, 10.0, 0.0, # Wind
         True, 5000.0, 2.0, 2.0, # Propulsion
-        True, mat.density, mat.specific_heat, mat.emissivity, proj.nose_radius_m # Hypersonics
+        True, mat.density, mat.specific_heat, mat.emissivity, proj.nose_radius_m, # Hypersonics
+        False, 4.0, 30.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 # Guidance args (inactive)
     )
 
     # 6. Compare

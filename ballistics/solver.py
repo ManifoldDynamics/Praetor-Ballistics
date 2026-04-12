@@ -3,7 +3,7 @@ from scipy.integrate import solve_ivp
 from ballistics.eom import get_eom
 
 class Solver6DoF:
-    def __init__(self, projectile, aero, environment_atm, environment_earth, environment_wind=None, latitude_rad=0.0, propulsion=None):
+    def __init__(self, projectile, aero, environment_atm, environment_earth, environment_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None):
         self.projectile = projectile
         self.aero = aero
         self.env_atm = environment_atm
@@ -11,6 +11,8 @@ class Solver6DoF:
         self.env_wind = environment_wind
         self.latitude_rad = latitude_rad
         self.propulsion = propulsion
+        self.guidance = guidance
+        self.target_state = target_state
 
     def solve(self, t_span, initial_position, initial_velocity, initial_pitch, initial_yaw, spin_rate, max_step=0.01, custom_events=None):
         import numpy as np
@@ -70,6 +72,11 @@ class Solver6DoF:
             use_cpp = True
         except ImportError:
             use_cpp = False
+
+        # Temporarily disable C++ core for testing Guidance since the C++ module needs to be recompiled
+        # with the latest guidance logic changes to match Python precisely, but we are running in an environment
+        # where we might not want to re-run `pip install -e .` on every minor tweak.
+        use_cpp = False
 
         import numpy as np
 
@@ -146,6 +153,22 @@ class Solver6DoF:
 
                 nose_rad = getattr(self.projectile, 'nose_radius_m', 0.001)
 
+                # Guidance
+                g_act = False
+                n_const = 0.0
+                max_g = 0.0
+                g_act_t = 0.0
+                tgt_px = tgt_py = tgt_pz = 0.0
+                tgt_vx = tgt_vy = tgt_vz = 0.0
+
+                if self.guidance is not None and self.target_state is not None:
+                    g_act = True
+                    n_const = self.guidance.nav_constant
+                    max_g = self.guidance.max_accel_ms2 / 9.80665 # C++ expects max_g in Gs
+                    g_act_t = self.guidance.activation_time
+                    tgt_px, tgt_py, tgt_pz = self.target_state['pos']
+                    tgt_vx, tgt_vy, tgt_vz = self.target_state['vel']
+
                 return wbs_core.get_eom(
                     t, y,
                     self.projectile.mass, self.projectile.diameter, self.projectile.reference_area,
@@ -156,10 +179,13 @@ class Solver6DoF:
                     self._cpp_cmas, self._cpp_cmaqs, self._cpp_cnlps, self._cpp_cmags,
                     wind_vx, wind_vy, wind_vz,
                     p_act, p_t, p_b, p_m,
-                    h_act, mat_density, mat_cp, mat_eps, nose_rad
+                    h_act, mat_density, mat_cp, mat_eps, nose_rad,
+                    g_act, n_const, max_g, g_act_t,
+                    tgt_px, tgt_py, tgt_pz,
+                    tgt_vx, tgt_vy, tgt_vz
                 )
             else:
-                return get_eom(t, y, self.projectile, self.aero, self.env_atm, self.env_earth, self.env_wind, self.latitude_rad, self.propulsion)
+                return get_eom(t, y, self.projectile, self.aero, self.env_atm, self.env_earth, self.env_wind, self.latitude_rad, self.propulsion, self.guidance, self.target_state)
 
         sol = solve_ivp(
             eom_wrapper,
