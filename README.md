@@ -12,6 +12,7 @@ A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine written
   - Default simple analytical approximations
   - Standard Reference Models (G1 and G7 functions included out-of-the-box)
   - Custom user-defined tabular data via CSV parsing.
+- **CAD Integration**: Ingest STL files directly to automatically calculate the projectile's Mass, Reference Area (Caliber), and Principal Moments of Inertia ($I_x$, $I_y$) based on material density.
 
 ## Installation
 
@@ -87,6 +88,22 @@ res = targeting.find_firing_solution([target_x, target_y, target_z], v0, spin)
 if res.success:
     print(f"Required Pitch: {np.rad2deg(res.pitch):.2f} degrees")
     print(f"Required Yaw: {np.rad2deg(res.yaw):.2f} degrees")
+```
+
+## Using Custom CAD Models (STL)
+
+If you have a 3D model of your projectile, you can bypass manually defining the physical properties. The engine will automatically parse the mesh, calculate its volume, and derive the Mass, Caliber, and Inertia Tensors based on your specified material density.
+
+```python
+from ballistics.projectile import Projectile
+
+# Load an STL of a lead bullet (Density of Lead ≈ 11340 kg/m^3)
+# Assumes the STL was exported with units in meters.
+proj = Projectile.from_stl("my_bullet.stl", density_kg_m3=11340.0)
+
+print(f"Auto-calculated Mass: {proj.mass} kg")
+print(f"Auto-calculated Caliber: {proj.diameter} m")
+print(f"Auto-calculated I_x: {proj.i_x}")
 ```
 
 ## Using Custom Aerodynamics Data (CSV)

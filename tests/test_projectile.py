@@ -72,3 +72,42 @@ def test_g1_g7_models():
 
     # G7 should be more aerodynamic (lower Cd) than G1 at supersonic speeds
     assert aero_g7.cd(2.0) < aero_g1.cd(2.0)
+
+def test_projectile_from_stl(tmp_path):
+    import trimesh
+    # Create a known unit cylinder: radius = 0.5, height = 1.0
+    # Mass = density * volume = density * pi * r^2 * h
+    radius = 0.5
+    height = 1.0
+    density = 1000.0 # kg/m^3
+
+    mesh = trimesh.creation.cylinder(radius=radius, height=height)
+
+    # trimesh cylinder is aligned with Z. We rotate it to align with X (our roll axis)
+    transform = trimesh.transformations.rotation_matrix(np.pi/2, [0, 1, 0])
+    mesh.apply_transform(transform)
+
+    stl_path = tmp_path / "test_cylinder.stl"
+    mesh.export(stl_path)
+
+    proj = Projectile.from_stl(stl_path, density_kg_m3=density)
+
+    # 1. Check Mass
+    expected_vol = np.pi * radius**2 * height
+    expected_mass = expected_vol * density
+    assert np.isclose(proj.mass, expected_mass, rtol=0.01) # Small tolerance for mesh discretization
+
+    # 2. Check Caliber (Diameter)
+    assert np.isclose(proj.diameter, radius * 2.0, rtol=0.01)
+
+    # 3. Check Inertia
+    # For a solid cylinder along X axis:
+    # Ix = 0.5 * m * r^2
+    # Iy = Iz = (1/12) * m * (3*r^2 + h^2)
+    expected_ix = 0.5 * expected_mass * radius**2
+    expected_iy = (1.0/12.0) * expected_mass * (3*radius**2 + height**2)
+
+    # STL meshes are faceted, so a cylinder is actually a prism.
+    # This introduces a small error in volume and inertia compared to a perfect theoretical cylinder.
+    assert np.isclose(proj.i_x, expected_ix, rtol=0.05)
+    assert np.isclose(proj.i_y, expected_iy, rtol=0.05)

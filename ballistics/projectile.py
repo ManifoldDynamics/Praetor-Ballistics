@@ -12,6 +12,55 @@ class Projectile:
         self.i_x = i_x
         self.i_y = i_y
 
+    @classmethod
+    def from_stl(cls, filepath, density_kg_m3, scale_to_meters=1.0):
+        """
+        Loads an STL file using trimesh to automatically compute the physical properties.
+        Assumes the mesh is watertight and aligned with the principal axes.
+
+        filepath: Path to the STL file.
+        density_kg_m3: Material density in kg/m^3 (e.g., Lead=11340, Steel=7850)
+        scale_to_meters: Factor to convert mesh units to meters (e.g., if mesh is in mm, use 0.001)
+        """
+        import trimesh
+
+        # Load mesh
+        mesh = trimesh.load(filepath)
+
+        # Apply scaling if the STL isn't natively in meters
+        if scale_to_meters != 1.0:
+            mesh.apply_scale(scale_to_meters)
+
+        # Ensure watertight for accurate volume calculation
+        if not mesh.is_watertight:
+            # We will still try to compute, but it might be slightly inaccurate
+            import warnings
+            warnings.warn(f"Mesh {filepath} is not watertight. Volume/Inertia calculations may be imprecise.")
+
+        # Calculate Mass
+        volume = mesh.volume
+        mass = volume * density_kg_m3
+
+        # Calculate Inertia Tensor
+        # trimesh returns inertia assuming density=1, so we multiply by our material density
+        inertia_tensor = mesh.moment_inertia * density_kg_m3
+
+        # Principal moments are the diagonal of the inertia tensor
+        # Assuming the mesh is aligned such that X is the longitudinal (roll) axis,
+        # and Y/Z are the transverse axes.
+        i_x = inertia_tensor[0, 0]
+
+        # For an axisymmetric projectile, Iy should equal Iz.
+        # We take the average to smooth out minor meshing artifacts.
+        i_y = (inertia_tensor[1, 1] + inertia_tensor[2, 2]) / 2.0
+
+        # Determine Reference Diameter
+        # We look at the bounding box extents in the Y and Z axes (transverse)
+        extents = mesh.extents
+        diameter = max(extents[1], extents[2])
+
+        return cls(mass=mass, diameter=diameter, i_x=i_x, i_y=i_y)
+
 
 class Aerodynamics:
     """
