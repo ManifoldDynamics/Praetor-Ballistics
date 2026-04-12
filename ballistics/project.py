@@ -51,6 +51,11 @@ class BallisticsProject:
                 "target_stl": "",
                 "target_armor_mm": 10.0,
                 "fragments": 500
+            },
+            "hypersonics": {
+                "active": False,
+                "material": "Tungsten (WHA)",
+                "nose_radius_m": 0.01
             }
         }
         self.filepath = None

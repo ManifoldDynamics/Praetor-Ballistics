@@ -28,12 +28,14 @@ from ballistics.lethality import FragmentationModel
 from ballistics.raytracer import LethalityRayTracer
 from ballistics.geometry import ProjectileGeometry
 from ballistics.aero_predictor import AeroPredictor
+from ballistics.materials import MATERIALS_DATABASE, Material
 
 class MplCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=8, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
-        self.ax_side = self.fig.add_subplot(211)
-        self.ax_top = self.fig.add_subplot(212)
+        self.ax_side = self.fig.add_subplot(311)
+        self.ax_top = self.fig.add_subplot(312)
+        self.ax_temp = self.fig.add_subplot(313)
         super().__init__(self.fig)
         self.setParent(parent)
         self.fig.tight_layout(pad=3.0)
@@ -41,10 +43,12 @@ class MplCanvas(FigureCanvas):
     def plot_trajectory(self, sol):
         self.ax_side.clear()
         self.ax_top.clear()
+        self.ax_temp.clear()
 
         x = sol.y[0, :]
         y = sol.y[1, :]
         z = sol.y[2, :]
+        t = sol.t
 
         self.ax_side.plot(x, z, 'r-')
         self.ax_side.set_title('Side Profile (Altitude vs Range)')
@@ -58,14 +62,36 @@ class MplCanvas(FigureCanvas):
         self.ax_top.set_ylabel('Deflection Y (m)')
         self.ax_top.grid(True)
 
+        if len(sol.y) > 13:
+            temps = sol.y[13, :]
+            self.ax_temp.plot(t, temps, 'orange')
+
+            # Check if we have a material to plot melting point
+            mat_name = getattr(self, 'current_material_name', None)
+            if mat_name:
+                from ballistics.materials import Material
+                mat = Material(mat_name)
+                self.ax_temp.axhline(mat.melting_point, color='red', linestyle='--', label=f'Melting Point ({mat.melting_point}K)')
+                self.ax_temp.legend()
+
+            self.ax_temp.set_title('Nose Tip Temperature vs Time')
+            self.ax_temp.set_xlabel('Time (s)')
+            self.ax_temp.set_ylabel('Temperature (K)')
+            self.ax_temp.grid(True)
+            self.ax_temp.set_visible(True)
+        else:
+            self.ax_temp.set_visible(False)
+
         self.draw()
 
     def plot_dispersion(self, mc_res):
         self.ax_side.clear()
         self.ax_top.clear()
+        self.ax_temp.clear()
 
-        # Hide the bottom plot for dispersion, we only need a 2D scatter
+        # Hide the bottom plots for dispersion, we only need a 2D scatter
         self.ax_top.set_visible(False)
+        self.ax_temp.set_visible(False)
 
         # Re-configure top plot (which is actually ax_side)
         ax = self.ax_side
@@ -98,6 +124,7 @@ class MplCanvas(FigureCanvas):
 
     def reset_layout(self):
         self.ax_top.set_visible(True)
+        self.ax_temp.set_visible(True)
 
 
 import matplotlib.pyplot as plt
@@ -288,6 +315,20 @@ class BallisticsGUI(QMainWindow):
 
         group_proj.setLayout(form_proj)
         left_layout.addWidget(group_proj)
+
+        # Hypersonics Inputs
+        group_hyper = QGroupBox("Hypersonics & Aerothermodynamics")
+        group_hyper.setCheckable(True)
+        group_hyper.setChecked(False)
+        self.group_hyper = group_hyper
+        form_hyper = QFormLayout()
+        self.combo_mat = QComboBox()
+        self.combo_mat.addItems(list(MATERIALS_DATABASE.keys()))
+        self.input_nose_rad = QLineEdit("0.01")
+        form_hyper.addRow("Material:", self.combo_mat)
+        form_hyper.addRow("Nose Radius (m):", self.input_nose_rad)
+        group_hyper.setLayout(form_hyper)
+        left_layout.addWidget(group_hyper)
 
         # Active Propulsion Inputs
         group_prop = QGroupBox("Active Propulsion (Rockets)")
@@ -499,6 +540,14 @@ class BallisticsGUI(QMainWindow):
         if l.get("target_stl"):
             self.btn_load_tgt_stl.setText(f"Target: {os.path.basename(l['target_stl'])}")
 
+        # Hypersonics
+        h = state.get("hypersonics", {})
+        self.group_hyper.setChecked(h.get("active", False))
+        mat_idx = self.combo_mat.findText(h.get("material", "Tungsten (WHA)"))
+        if mat_idx >= 0:
+            self.combo_mat.setCurrentIndex(mat_idx)
+        self.input_nose_rad.setText(str(h.get("nose_radius_m", 0.01)))
+
     def populate_project_from_gui(self):
         state = self.project.state
         try:
@@ -537,6 +586,10 @@ class BallisticsGUI(QMainWindow):
             state["lethality"]["explosive_mass_kg"] = float(self.input_exp_mass.text())
             state["lethality"]["fragments"] = int(self.input_fragments.text())
             state["lethality"]["target_armor_mm"] = float(self.input_tgt_armor.text())
+
+            state["hypersonics"]["active"] = self.group_hyper.isChecked()
+            state["hypersonics"]["material"] = self.combo_mat.currentText()
+            state["hypersonics"]["nose_radius_m"] = float(self.input_nose_rad.text())
         except ValueError:
             pass # Ignore conversion errors when typing
 
@@ -728,7 +781,16 @@ class BallisticsGUI(QMainWindow):
                 stl_proj = Projectile.from_stl(stl_path, density_kg_m3=11340.0)
                 ix, iy = stl_proj.i_x, stl_proj.i_y
 
-            proj = Projectile(mass=mass, diameter=diam, i_x=ix, i_y=iy)
+            mat = None
+            nose_r = 0.0
+            if state.get("hypersonics", {}).get("active", False):
+                mat = Material(state["hypersonics"]["material"])
+                nose_r = state["hypersonics"]["nose_radius_m"]
+                self.canvas_traj.current_material_name = mat.name
+            else:
+                self.canvas_traj.current_material_name = None
+
+            proj = Projectile(mass=mass, diameter=diam, i_x=ix, i_y=iy, material=mat, nose_radius_m=nose_r)
 
             if "G7" in state["projectile"]["aero_model"]:
                 aero = Aerodynamics.g7()

@@ -5,12 +5,14 @@ class Projectile:
     """
     Physical properties of the projectile.
     """
-    def __init__(self, mass, diameter, i_x, i_y):
+    def __init__(self, mass, diameter, i_x, i_y, material=None, nose_radius_m=0.0):
         self.mass = mass
         self.diameter = diameter
         self.reference_area = np.pi * (diameter / 2.0)**2
         self.i_x = i_x
         self.i_y = i_y
+        self.material = material
+        self.nose_radius_m = nose_radius_m
 
     @classmethod
     def from_stl(cls, filepath, density_kg_m3, scale_to_meters=1.0):

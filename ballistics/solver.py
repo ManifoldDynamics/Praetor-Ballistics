@@ -37,11 +37,18 @@ class Solver6DoF:
 
         omega0 = np.array([spin_rate, 0.0, 0.0])
 
-        y0 = np.zeros(13)
+        # Include 14th state for temperature if material is provided
+        use_thermo = hasattr(self.projectile, 'material') and self.projectile.material is not None
+        num_states = 14 if use_thermo else 13
+
+        y0 = np.zeros(num_states)
         y0[0:3] = initial_position
         y0[3:6] = v0
         y0[6:10] = q_init
         y0[10:13] = omega0
+
+        if use_thermo:
+            y0[13] = 300.0 # Start at ~27C (300K)
 
         def hit_ground(t, y, *args):
             return y[2] # Z position

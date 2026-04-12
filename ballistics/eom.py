@@ -75,6 +75,8 @@ def quaternion_to_euler(q):
 
     return yaw, pitch, roll
 
+from ballistics.aerothermodynamics import HypersonicHeating
+
 def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0, propulsion=None):
     """
     propulsion: None, or a dict containing:
@@ -86,6 +88,9 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     vel = state[3:6] # Inertial velocity
     q = state[6:10]
     omega = state[10:13] # [p, q, r]
+
+    # Optional 14th state for Aerothermodynamics
+    T_nose = state[13] if len(state) > 13 else 300.0 # Default 300K (27C) if unmodeled
 
     # Calculate environment variables
     altitude = pos[2]
@@ -242,10 +247,21 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     ])
     q_dot_vec = q_dot_mat @ omega
 
-    state_dot = np.zeros(13)
+    # Aerothermodynamics
+    if len(state) > 13 and hasattr(projectile, 'material') and hasattr(projectile, 'nose_radius_m'):
+        q_conv = HypersonicHeating.fay_riddell_heat_flux(atm['density'], v_air_mag, projectile.nose_radius_m)
+        q_rad = HypersonicHeating.radiative_cooling_flux(T_nose, projectile.material.emissivity)
+        dT_dt = HypersonicHeating.calculate_nose_temperature_derivative(q_conv, q_rad, projectile.nose_radius_m, projectile.material)
+    else:
+        dT_dt = 0.0
+
+    state_dot = np.zeros(len(state))
     state_dot[0:3] = vel
     state_dot[3:6] = accel
     state_dot[6:10] = q_dot_vec
     state_dot[10:13] = omega_dot
+
+    if len(state) > 13:
+        state_dot[13] = dT_dt
 
     return state_dot
