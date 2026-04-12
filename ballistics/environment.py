@@ -3,45 +3,74 @@ import numpy as np
 class StandardAtmosphere:
     """
     Computes standard atmospheric properties based on the 1976 US Standard Atmosphere.
-    Currently simplified to the troposphere layer (0 to 11,000 meters).
+    Can be initialized with custom baseline weather conditions to calculate non-standard air density,
+    utilizing Virtual Temperature to account for relative humidity.
     """
-    # Sea level standard constants
-    T0 = 288.15      # Sea level standard temperature [K]
-    P0 = 101325.0    # Sea level standard pressure [Pa]
-    RHO0 = 1.225     # Sea level standard density [kg/m^3]
     G = 9.80665      # Standard acceleration of gravity [m/s^2]
     R = 287.05       # Specific gas constant for dry air [J/(kg*K)]
     L = -0.0065      # Temperature lapse rate in the troposphere [K/m]
 
-    @classmethod
-    def get_properties(cls, altitude):
+    def __init__(self, temperature_c=15.0, pressure_pa=101325.0, humidity_percent=0.0):
+        """
+        Initializes the atmospheric model. Defaults to Standard Sea Level conditions.
+        temperature_c: Temperature in Celsius
+        pressure_pa: Station pressure in Pascals (Absolute, not sea-level corrected)
+        humidity_percent: Relative humidity (0.0 to 100.0)
+        """
+        self.T0 = temperature_c + 273.15 # Convert to Kelvin
+        self.P0 = pressure_pa
+        self.RH = humidity_percent / 100.0
+
+    def _calculate_virtual_temperature(self, T_k, P_pa):
+        """
+        Calculates virtual temperature to account for humidity reducing air density.
+        """
+        if self.RH <= 0.0:
+            return T_k
+
+        # Tetens equation for saturation vapor pressure of water
+        T_c = T_k - 273.15
+        P_sat = 610.78 * np.exp((17.27 * T_c) / (T_c + 237.3))
+
+        # Actual vapor pressure
+        P_vapor = self.RH * P_sat
+
+        # Virtual temperature
+        T_v = T_k / (1.0 - (P_vapor / P_pa) * (1.0 - 0.622))
+        return T_v
+
+    def get_properties(self, altitude):
         """
         Returns temperature, pressure, density, and speed of sound at a given altitude.
-        Altitude in meters.
+        Altitude in meters relative to the baseline station.
         """
         if altitude < 0:
-            altitude = 0.0 # Clamp to sea level
+            altitude = 0.0 # Clamp to station level
 
         if altitude < 11000.0:
             # Troposphere
-            T = cls.T0 + cls.L * altitude
-            P = cls.P0 * (T / cls.T0) ** (-cls.G / (cls.L * cls.R))
+            T = self.T0 + self.L * altitude
+            P = self.P0 * (T / self.T0) ** (-self.G / (self.L * self.R))
         else:
             # Tropopause / Lower Stratosphere (11km to 20km)
-            T_11k = cls.T0 + cls.L * 11000.0
-            P_11k = cls.P0 * (T_11k / cls.T0) ** (-cls.G / (cls.L * cls.R))
+            T_11k = self.T0 + self.L * 11000.0
+            P_11k = self.P0 * (T_11k / self.T0) ** (-self.G / (self.L * self.R))
 
             T = T_11k # Isothermal layer
-            P = P_11k * np.exp(-cls.G * (altitude - 11000.0) / (cls.R * T))
+            P = P_11k * np.exp(-self.G * (altitude - 11000.0) / (self.R * T))
 
-        rho = P / (cls.R * T)
+        # Adjust Temperature to Virtual Temperature to account for humidity in density calculation
+        T_v = self._calculate_virtual_temperature(T, P)
 
-        # Speed of sound: a = sqrt(gamma * R * T), gamma = 1.4 for dry air
+        rho = P / (self.R * T_v)
+
+        # Speed of sound: a = sqrt(gamma * R * T_v), gamma = 1.4 for dry air
         gamma = 1.4
-        speed_of_sound = np.sqrt(gamma * cls.R * T)
+        speed_of_sound = np.sqrt(gamma * self.R * T_v)
 
         return {
-            'temperature': T,         # [K]
+            'temperature': T,         # Actual Temperature [K]
+            'virtual_temperature': T_v, # Virtual Temperature [K]
             'pressure': P,            # [Pa]
             'density': rho,           # [kg/m^3]
             'speed_of_sound': speed_of_sound # [m/s]

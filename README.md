@@ -6,7 +6,7 @@ A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine written
 
 - **6-DoF Physics Solver**: Solves the complete equations of motion over time using Runge-Kutta integration, accurately modeling a rigid body's translation and rotation.
 - **Targeting & Zeroing System**: Iteratively solves for the exact Elevation (Pitch) and Azimuth (Yaw) required to intercept a specific 3D coordinate, taking into account spin drift, Coriolis effect, and aerodynamic drop.
-- **Environmental Modeling**: Uses standard models for Earth's gravity (with altitude decay), Coriolis effect, and the 1976 US Standard Atmosphere (calculating air density and speed of sound dynamically).
+- **Environmental Modeling**: Uses standard models for Earth's gravity (with altitude decay), Coriolis effect, and atmospheric properties. Supports custom weather baselines (accounting for humidity via Virtual Temperature) and **Live Weather Fetching** using coordinates.
 - **Advanced Wind Profiles**: Support for 3D vector wind fields, allowing definition of custom layered crosswinds (by speed/azimuth or Cartesian vectors) that smoothly interpolate across altitude bands.
 - **Aerodynamics Model**: Supports calculating aerodynamic forces and moments based on:
   - Default simple analytical approximations
@@ -34,8 +34,10 @@ from ballistics.environment import StandardAtmosphere, EarthModel
 from ballistics.projectile import Projectile, Aerodynamics
 from ballistics.solver import Solver6DoF
 
-# 1. Initialize Environmental Models
-env_atm = StandardAtmosphere()
+# 1. Initialize Environmental Models (Live Weather Example)
+from ballistics.weather import LiveWeather
+# Fetch live weather for a high-altitude location (e.g. Leadville, CO)
+env_atm = LiveWeather.fetch_atmosphere(latitude=39.2508, longitude=-106.2925)
 env_earth = EarthModel()
 
 from ballistics.environment import WindProfile
