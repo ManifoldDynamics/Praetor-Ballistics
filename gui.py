@@ -26,6 +26,8 @@ from ballistics.viz3d import visualize_trajectory_3d
 from ballistics.explosives import EXPLOSIVES_DATABASE, Explosive
 from ballistics.lethality import FragmentationModel
 from ballistics.raytracer import LethalityRayTracer
+from ballistics.geometry import ProjectileGeometry
+from ballistics.aero_predictor import AeroPredictor
 
 class MplCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=8, dpi=100):
@@ -121,7 +123,50 @@ class BallisticsGUI(QMainWindow):
         self.build_menubar()
 
         # Start on Main Menu
+        self.build_aero_predictor()
+
         self.stacked_widget.setCurrentIndex(0)
+
+    def build_aero_predictor(self):
+        self.aero_widget = QWidget()
+        layout = QVBoxLayout(self.aero_widget)
+
+        form_layout = QFormLayout()
+
+        self.input_geo_cal = QLineEdit("0.155")
+        self.input_geo_n_len = QLineEdit("0.4")
+        self.combo_nose = QComboBox()
+        self.combo_nose.addItems(["tangent_ogive", "cone"])
+        self.input_geo_meplat = QLineEdit("0.0")
+        self.input_geo_b_len = QLineEdit("0.3")
+        self.input_geo_bt_len = QLineEdit("0.1")
+        self.input_geo_bt_base = QLineEdit("0.13")
+
+        form_layout.addRow("Caliber (m):", self.input_geo_cal)
+        form_layout.addRow("Nose Length (m):", self.input_geo_n_len)
+        form_layout.addRow("Nose Type:", self.combo_nose)
+        form_layout.addRow("Meplat Diameter (m):", self.input_geo_meplat)
+        form_layout.addRow("Body Length (m):", self.input_geo_b_len)
+        form_layout.addRow("Boattail Length (m):", self.input_geo_bt_len)
+        form_layout.addRow("Boattail Base Diam (m):", self.input_geo_bt_base)
+
+        layout.addLayout(form_layout)
+
+        btn_layout = QHBoxLayout()
+        btn_calc = QPushButton("Predict Cd vs Mach Curve")
+        btn_calc.clicked.connect(self.run_aero_predictor)
+        btn_back = QPushButton("Back to Calculator")
+        btn_back.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(1))
+
+        btn_layout.addWidget(btn_calc)
+        btn_layout.addWidget(btn_back)
+        layout.addLayout(btn_layout)
+
+        self.canvas_aero = MplCanvas(self, width=6, height=4, dpi=100)
+        self.canvas_aero.ax_top.set_visible(False)
+        layout.addWidget(self.canvas_aero)
+
+        self.stacked_widget.addWidget(self.aero_widget) # Index 2
 
     def build_menubar(self):
         menubar = self.menuBar()
@@ -225,7 +270,7 @@ class BallisticsGUI(QMainWindow):
         self.input_v0 = QLineEdit()
         self.input_spin = QLineEdit()
         self.combo_aero = QComboBox()
-        self.combo_aero.addItems(["G7 Standard", "G1 Standard"])
+        self.combo_aero.addItems(["G7 Standard", "G1 Standard", "Auto-Predicted (Datcom)"])
         form_proj.addRow("Mass (kg):", self.input_mass)
         form_proj.addRow("Caliber (m):", self.input_diam)
         form_proj.addRow("Muzzle Vel (m/s):", self.input_v0)
@@ -235,6 +280,11 @@ class BallisticsGUI(QMainWindow):
         self.btn_load_stl = QPushButton("Load Custom CAD (STL)...")
         self.btn_load_stl.clicked.connect(self.load_stl)
         form_proj.addRow(self.btn_load_stl)
+
+        # Datcom Aero Predictor Input Button
+        self.btn_aero_predict = QPushButton("Empirical Aero Predictor (Datcom)")
+        self.btn_aero_predict.clicked.connect(self.open_aero_predictor)
+        form_proj.addRow(self.btn_aero_predict)
 
         group_proj.setLayout(form_proj)
         left_layout.addWidget(group_proj)
@@ -539,6 +589,47 @@ class BallisticsGUI(QMainWindow):
             except Exception as e:
                 self.text_output.setText(f"Failed to load STL: {e}")
 
+    def open_aero_predictor(self):
+        self.stacked_widget.setCurrentIndex(2)
+
+    def run_aero_predictor(self):
+        try:
+            geo = ProjectileGeometry(
+                caliber_m=float(self.input_geo_cal.text()),
+                nose_length_m=float(self.input_geo_n_len.text()),
+                nose_type=self.combo_nose.currentText(),
+                meplat_diameter_m=float(self.input_geo_meplat.text()),
+                body_length_m=float(self.input_geo_b_len.text()),
+                boattail_length_m=float(self.input_geo_bt_len.text()),
+                boattail_base_diameter_m=float(self.input_geo_bt_base.text())
+            )
+
+            # Predict based on current atmosphere
+            props = self.current_atm.get_properties(0)
+            predictor = AeroPredictor(geo, density_sl=props['density'], sound_speed_sl=props['speed_of_sound'])
+
+            self.custom_aero_model = predictor.predict_aerodynamics(num_points=100, max_mach=5.0)
+
+            # Set the combo box to Auto Predicted
+            idx = self.combo_aero.findText("Auto-Predicted (Datcom)")
+            if idx >= 0:
+                self.combo_aero.setCurrentIndex(idx)
+
+            # Plot the results
+            self.canvas_aero.ax_side.clear()
+            machs = np.linspace(0.1, 5.0, 100)
+            cds = [self.custom_aero_model.cd(m) for m in machs]
+
+            self.canvas_aero.ax_side.plot(machs, cds, 'b-')
+            self.canvas_aero.ax_side.set_title('Predicted Drag Coefficient ($C_D$) vs Mach')
+            self.canvas_aero.ax_side.set_xlabel('Mach Number')
+            self.canvas_aero.ax_side.set_ylabel('$C_D$')
+            self.canvas_aero.ax_side.grid(True)
+            self.canvas_aero.draw()
+
+        except Exception as e:
+            print(f"Error predicting aero: {e}")
+
     def load_target_stl(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "Load Target STL", "", "STL Files (*.stl)")
         if filepath:
@@ -641,6 +732,8 @@ class BallisticsGUI(QMainWindow):
 
             if "G7" in state["projectile"]["aero_model"]:
                 aero = Aerodynamics.g7()
+            elif "Auto-Predicted" in state["projectile"]["aero_model"] and hasattr(self, 'custom_aero_model'):
+                aero = self.custom_aero_model
             else:
                 aero = Aerodynamics.g1()
 
@@ -724,7 +817,14 @@ class BallisticsGUI(QMainWindow):
             iy = ix * 10.0
 
             proj = Projectile(mass=mass, diameter=diam, i_x=ix, i_y=iy)
-            aero = Aerodynamics.g7() if "G7" in state["projectile"]["aero_model"] else Aerodynamics.g1()
+
+            if "G7" in state["projectile"]["aero_model"]:
+                aero = Aerodynamics.g7()
+            elif "Auto-Predicted" in state["projectile"]["aero_model"] and hasattr(self, 'custom_aero_model'):
+                aero = self.custom_aero_model
+            else:
+                aero = Aerodynamics.g1()
+
             env_earth = EarthModel()
 
             wind = WindProfile()
