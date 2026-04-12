@@ -4,3 +4,4 @@ pytest
 matplotlib
 requests
 trimesh
+PyQt6

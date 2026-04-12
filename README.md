@@ -5,6 +5,7 @@ A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine written
 ## Features
 
 - **6-DoF Physics Solver**: Solves the complete equations of motion over time using Runge-Kutta integration, accurately modeling a rigid body's translation and rotation.
+- **Interior Ballistics Thermodynamics**: Solves lumped-parameter thermodynamic differential equations (like STANAG 4367) to calculate the pressure curve, burn fraction, and muzzle velocity of a projectile based on chamber volume, barrel length, charge mass, and propellant type. Includes a database of standard energetic materials.
 - **Targeting & Zeroing System**: Iteratively solves for the exact Elevation (Pitch) and Azimuth (Yaw) required to intercept a specific 3D coordinate, taking into account spin drift, Coriolis effect, and aerodynamic drop.
 - **Terminal Ballistics**: Includes standard empirical armor penetration formulas (`De Marre`, `Krupp`, `Lanz-Odermatt` for APFSDS) to estimate lethality against armor upon target impact.
 - **Environmental Modeling**: Uses standard models for Earth's gravity (with altitude decay), Coriolis effect, and atmospheric properties. Supports custom weather baselines (accounting for humidity via Virtual Temperature) and **Live Weather Fetching** using coordinates.
@@ -26,7 +27,17 @@ cd ballistics
 pip install -r requirements.txt
 ```
 
-## Quick Start
+## Desktop GUI
+
+The easiest way to interact with the engine is via the built-in PyQt6 graphical user interface. This provides a split-pane layout to configure interior thermodynamics (propellant type, barrel length), download live weather via GPS coordinates, set target parameters, and calculate the exact firing solution while instantly plotting the 3D trajectory profiles.
+
+```bash
+python gui.py
+```
+
+The GUI includes a fully-featured **Main Menu** and **Project System**. You can use `File -> Save` to save your projectile parameters, target coordinates, and environment setup as a `.blst` JSON file, allowing you to reload and resume your ballistic studies later using `File -> Open Project...`.
+
+## Python API Quick Start
 
 You can simulate a standard 155mm projectile using the built-in G7 standard aerodynamics model:
 

@@ -1,0 +1,495 @@
+import sys
+import numpy as np
+import os
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                             QHBoxLayout, QLabel, QLineEdit, QPushButton,
+                             QGroupBox, QFormLayout, QTextEdit, QComboBox,
+                             QStackedWidget, QFileDialog, QMenuBar, QMenu)
+from PyQt6.QtGui import QAction
+from PyQt6.QtCore import Qt
+
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+from ballistics.environment import StandardAtmosphere, EarthModel, WindProfile
+from ballistics.weather import LiveWeather
+from ballistics.projectile import Projectile, Aerodynamics
+from ballistics.solver import Solver6DoF
+from ballistics.targeting import TargetingSystem
+from ballistics.project import BallisticsProject
+from ballistics.propellants import PROPELLANT_DATABASE, Propellant
+from ballistics.interior_ballistics import GunSystem, Charge
+from ballistics.interior_solver import InteriorSolver
+
+class MplCanvas(FigureCanvas):
+    def __init__(self, parent=None, width=5, height=8, dpi=100):
+        self.fig = Figure(figsize=(width, height), dpi=dpi)
+        self.ax_side = self.fig.add_subplot(211)
+        self.ax_top = self.fig.add_subplot(212)
+        super().__init__(self.fig)
+        self.setParent(parent)
+        self.fig.tight_layout(pad=3.0)
+
+    def plot_trajectory(self, sol):
+        self.ax_side.clear()
+        self.ax_top.clear()
+
+        x = sol.y[0, :]
+        y = sol.y[1, :]
+        z = sol.y[2, :]
+
+        self.ax_side.plot(x, z, 'r-')
+        self.ax_side.set_title('Side Profile (Altitude vs Range)')
+        self.ax_side.set_xlabel('Range X (m)')
+        self.ax_side.set_ylabel('Altitude Z (m)')
+        self.ax_side.grid(True)
+
+        self.ax_top.plot(x, y, 'g-')
+        self.ax_top.set_title('Top-Down Profile (Deflection)')
+        self.ax_top.set_xlabel('Range X (m)')
+        self.ax_top.set_ylabel('Deflection Y (m)')
+        self.ax_top.grid(True)
+
+        self.draw()
+
+
+class BallisticsGUI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("PRODAS-Killer: 6-DoF Ballistics Engine")
+        self.resize(1200, 800)
+
+        self.project = BallisticsProject()
+        self.current_atm = StandardAtmosphere()
+
+        # Stacked Widget to hold different screens
+        self.stacked_widget = QStackedWidget()
+        self.setCentralWidget(self.stacked_widget)
+
+        # Build Screens
+        self.build_main_menu()
+        self.build_calculator()
+
+        # Build Menu Bar
+        self.build_menubar()
+
+        # Start on Main Menu
+        self.stacked_widget.setCurrentIndex(0)
+
+    def build_menubar(self):
+        menubar = self.menuBar()
+
+        file_menu = menubar.addMenu("File")
+
+        action_new = QAction("New Project", self)
+        action_new.triggered.connect(self.new_project)
+        file_menu.addAction(action_new)
+
+        action_open = QAction("Open Project...", self)
+        action_open.triggered.connect(self.open_project)
+        file_menu.addAction(action_open)
+
+        file_menu.addSeparator()
+
+        action_save = QAction("Save", self)
+        action_save.triggered.connect(self.save_project)
+        file_menu.addAction(action_save)
+
+        action_save_as = QAction("Save As...", self)
+        action_save_as.triggered.connect(self.save_project_as)
+        file_menu.addAction(action_save_as)
+
+        file_menu.addSeparator()
+
+        action_exit = QAction("Exit", self)
+        action_exit.triggered.connect(self.close)
+        file_menu.addAction(action_exit)
+
+    def build_main_menu(self):
+        menu_widget = QWidget()
+        layout = QVBoxLayout(menu_widget)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        title = QLabel("PRODAS-KILLER")
+        title.setStyleSheet("font-size: 36px; font-weight: bold;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        subtitle = QLabel("Deep Physics 6-DoF Ballistics Engine")
+        subtitle.setStyleSheet("font-size: 18px; color: gray; margin-bottom: 40px;")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(subtitle)
+
+        btn_new = QPushButton("New Project")
+        btn_new.setFixedSize(300, 60)
+        btn_new.setStyleSheet("font-size: 18px;")
+        btn_new.clicked.connect(self.new_project)
+        layout.addWidget(btn_new, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        btn_open = QPushButton("Open Project")
+        btn_open.setFixedSize(300, 60)
+        btn_open.setStyleSheet("font-size: 18px;")
+        btn_open.clicked.connect(self.open_project)
+        layout.addWidget(btn_open, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.stacked_widget.addWidget(menu_widget) # Index 0
+
+    def build_calculator(self):
+        calc_widget = QWidget()
+        main_layout = QHBoxLayout(calc_widget)
+
+        # Left Panel - Inputs
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_panel.setFixedWidth(350)
+
+        # Interior Ballistics Inputs
+        group_int = QGroupBox("Interior Ballistics (Gun & Charge)")
+        form_int = QFormLayout()
+
+        self.input_chamber_vol = QLineEdit("0.018")
+        self.input_barrel_len = QLineEdit("5.0")
+
+        self.combo_powder = QComboBox()
+        self.combo_powder.addItems(list(PROPELLANT_DATABASE.keys()))
+
+        self.input_charge_mass = QLineEdit("12.0")
+        self.input_web = QLineEdit("0.003")
+
+        self.btn_calc_int = QPushButton("Calculate Muzzle Velocity")
+        self.btn_calc_int.setStyleSheet("background-color: darkblue; color: white;")
+        self.btn_calc_int.clicked.connect(self.calculate_interior)
+
+        form_int.addRow("Chamber Vol (m^3):", self.input_chamber_vol)
+        form_int.addRow("Barrel Len (m):", self.input_barrel_len)
+        form_int.addRow("Propellant Type:", self.combo_powder)
+        form_int.addRow("Charge Mass (kg):", self.input_charge_mass)
+        form_int.addRow("Web Thickness (m):", self.input_web)
+        form_int.addRow(self.btn_calc_int)
+
+        group_int.setLayout(form_int)
+        left_layout.addWidget(group_int)
+
+        # Projectile Inputs
+        group_proj = QGroupBox("Exterior Projectile Parameters")
+        form_proj = QFormLayout()
+        self.input_mass = QLineEdit()
+        self.input_diam = QLineEdit()
+        self.input_v0 = QLineEdit()
+        self.input_spin = QLineEdit()
+        self.combo_aero = QComboBox()
+        self.combo_aero.addItems(["G7 Standard", "G1 Standard"])
+        form_proj.addRow("Mass (kg):", self.input_mass)
+        form_proj.addRow("Caliber (m):", self.input_diam)
+        form_proj.addRow("Muzzle Vel (m/s):", self.input_v0)
+        form_proj.addRow("Spin Rate (rad/s):", self.input_spin)
+        form_proj.addRow("Aero Model:", self.combo_aero)
+
+        self.btn_load_stl = QPushButton("Load Custom CAD (STL)...")
+        self.btn_load_stl.clicked.connect(self.load_stl)
+        form_proj.addRow(self.btn_load_stl)
+
+        group_proj.setLayout(form_proj)
+        left_layout.addWidget(group_proj)
+
+        # Environment Inputs
+        group_env = QGroupBox("Environment")
+        form_env = QFormLayout()
+        self.input_wind_speed = QLineEdit()
+        self.input_wind_dir = QLineEdit()
+        self.input_lat = QLineEdit()
+        self.input_lon = QLineEdit()
+        self.btn_live_weather = QPushButton("Fetch Live Weather (Lat/Lon)")
+        self.btn_live_weather.clicked.connect(self.fetch_weather)
+        self.weather_status = QLabel("Using Standard Sea Level")
+
+        form_env.addRow("Wind Speed (m/s):", self.input_wind_speed)
+        form_env.addRow("Wind Dir (deg):", self.input_wind_dir)
+        form_env.addRow("Latitude:", self.input_lat)
+        form_env.addRow("Longitude:", self.input_lon)
+        form_env.addRow(self.btn_live_weather)
+        form_env.addRow(self.weather_status)
+        group_env.setLayout(form_env)
+        left_layout.addWidget(group_env)
+
+        # Target Inputs
+        group_target = QGroupBox("Targeting System")
+        form_target = QFormLayout()
+        self.input_tx = QLineEdit()
+        self.input_ty = QLineEdit()
+        self.input_tz = QLineEdit()
+        form_target.addRow("Target X (m):", self.input_tx)
+        form_target.addRow("Target Y (m):", self.input_ty)
+        form_target.addRow("Target Z (m):", self.input_tz)
+        group_target.setLayout(form_target)
+        left_layout.addWidget(group_target)
+
+        # Calculate Button
+        self.btn_calc = QPushButton("Calculate Firing Solution")
+        self.btn_calc.setStyleSheet("background-color: darkred; color: white; font-weight: bold; padding: 10px;")
+        self.btn_calc.clicked.connect(self.calculate_solution)
+        left_layout.addWidget(self.btn_calc)
+
+        left_layout.addStretch()
+
+        # Right Panel - Outputs
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+
+        self.text_output = QTextEdit()
+        self.text_output.setReadOnly(True)
+        self.text_output.setFixedHeight(150)
+        self.text_output.setStyleSheet("font-family: monospace;")
+        right_layout.addWidget(self.text_output)
+
+        self.canvas = MplCanvas(self, width=6, height=6, dpi=100)
+        right_layout.addWidget(self.canvas)
+
+        main_layout.addWidget(left_panel)
+        main_layout.addWidget(right_panel)
+
+        self.stacked_widget.addWidget(calc_widget) # Index 1
+
+    def populate_gui_from_project(self):
+        state = self.project.state
+
+        # Projectile
+        p = state.get("projectile", {})
+        self.input_mass.setText(str(p.get("mass_kg", 43.0)))
+        self.input_diam.setText(str(p.get("diameter_m", 0.155)))
+        self.input_v0.setText(str(p.get("muzzle_velocity_ms", 800.0)))
+        self.input_spin.setText(str(p.get("spin_rate_rads", 1884.95)))
+        aero_idx = self.combo_aero.findText(p.get("aero_model", "G7 Standard"))
+        if aero_idx >= 0:
+            self.combo_aero.setCurrentIndex(aero_idx)
+
+        if p.get("custom_stl_path"):
+            self.btn_load_stl.setText(f"STL: {os.path.basename(p['custom_stl_path'])}")
+
+        # Environment
+        e = state.get("environment", {})
+        self.input_wind_speed.setText(str(e.get("wind_speed_ms", 0.0)))
+        self.input_wind_dir.setText(str(e.get("wind_direction_deg", 90.0)))
+        self.input_lat.setText(str(e.get("latitude", 39.7392)))
+        self.input_lon.setText(str(e.get("longitude", -104.9903)))
+
+        # Target
+        t = state.get("target", {})
+        self.input_tx.setText(str(t.get("x_m", 2500.0)))
+        self.input_ty.setText(str(t.get("y_m", 0.0)))
+        self.input_tz.setText(str(t.get("z_m", 0.0)))
+
+    def populate_project_from_gui(self):
+        state = self.project.state
+        try:
+            state["projectile"]["mass_kg"] = float(self.input_mass.text())
+            state["projectile"]["diameter_m"] = float(self.input_diam.text())
+            state["projectile"]["muzzle_velocity_ms"] = float(self.input_v0.text())
+            state["projectile"]["spin_rate_rads"] = float(self.input_spin.text())
+            state["projectile"]["aero_model"] = self.combo_aero.currentText()
+
+            state["environment"]["wind_speed_ms"] = float(self.input_wind_speed.text())
+            state["environment"]["wind_direction_deg"] = float(self.input_wind_dir.text())
+            state["environment"]["latitude"] = float(self.input_lat.text())
+            state["environment"]["longitude"] = float(self.input_lon.text())
+
+            state["target"]["x_m"] = float(self.input_tx.text())
+            state["target"]["y_m"] = float(self.input_ty.text())
+            state["target"]["z_m"] = float(self.input_tz.text())
+        except ValueError:
+            pass # Ignore conversion errors when typing
+
+    def new_project(self):
+        self.project = BallisticsProject()
+        self.populate_gui_from_project()
+        self.stacked_widget.setCurrentIndex(1)
+        self.setWindowTitle("PRODAS-Killer - New Project")
+
+    def open_project(self):
+        filepath, _ = QFileDialog.getOpenFileName(self, "Open Ballistics Project", "", "Ballistics Project (*.blst);;JSON Files (*.json);;All Files (*)")
+        if filepath:
+            try:
+                self.project = BallisticsProject()
+                self.project.load(filepath)
+                self.populate_gui_from_project()
+                self.stacked_widget.setCurrentIndex(1)
+                self.setWindowTitle(f"PRODAS-Killer - {os.path.basename(filepath)}")
+            except Exception as e:
+                self.text_output.setText(f"Error loading project: {e}")
+
+    def save_project(self):
+        if self.project.filepath:
+            self.populate_project_from_gui()
+            self.project.save()
+            self.text_output.setText(f"Saved to {self.project.filepath}")
+        else:
+            self.save_project_as()
+
+    def save_project_as(self):
+        filepath, _ = QFileDialog.getSaveFileName(self, "Save Ballistics Project", "", "Ballistics Project (*.blst)")
+        if filepath:
+            if not filepath.endswith(".blst"):
+                filepath += ".blst"
+            self.populate_project_from_gui()
+            self.project.save(filepath)
+            self.setWindowTitle(f"PRODAS-Killer - {os.path.basename(filepath)}")
+            self.text_output.setText(f"Saved to {filepath}")
+
+    def load_stl(self):
+        filepath, _ = QFileDialog.getOpenFileName(self, "Load STL Mesh", "", "STL Files (*.stl)")
+        if filepath:
+            try:
+                # Load with default Lead density for demo
+                proj = Projectile.from_stl(filepath, density_kg_m3=11340.0)
+                self.input_mass.setText(f"{proj.mass:.4f}")
+                self.input_diam.setText(f"{proj.diameter:.4f}")
+                self.btn_load_stl.setText(f"STL: {os.path.basename(filepath)}")
+                self.project.state["projectile"]["custom_stl_path"] = filepath
+            except Exception as e:
+                self.text_output.setText(f"Failed to load STL: {e}")
+
+    def fetch_weather(self):
+        self.weather_status.setText("Fetching...")
+        QApplication.processEvents()
+        try:
+            lat = float(self.input_lat.text())
+            lon = float(self.input_lon.text())
+            self.current_atm = LiveWeather.fetch_atmosphere(lat, lon)
+            props = self.current_atm.get_properties(0)
+            self.weather_status.setText(f"Live Weather Loaded.\nTemp: {props['temperature']-273.15:.1f}C, Density: {props['density']:.3f} kg/m^3")
+        except Exception as e:
+            self.weather_status.setText(f"Error: {e}")
+            self.current_atm = StandardAtmosphere()
+
+    def calculate_interior(self):
+        try:
+            chamber_vol = float(self.input_chamber_vol.text())
+            barrel_len = float(self.input_barrel_len.text())
+            bore_diam = float(self.input_diam.text())
+            proj_mass = float(self.input_mass.text())
+
+            powder_name = self.combo_powder.currentText()
+            charge_mass = float(self.input_charge_mass.text())
+            web_thick = float(self.input_web.text())
+
+            gun = GunSystem(chamber_vol, barrel_len, bore_diam, proj_mass)
+            prop = Propellant(powder_name)
+            charge = Charge(prop, charge_mass, web_thick)
+
+            solver = InteriorSolver(gun, charge)
+            res = solver.solve()
+
+            if res.success:
+                self.input_v0.setText(f"{res.muzzle_velocity:.1f}")
+                out = "--- INTERIOR BALLISTICS ---\n"
+                out += f"Propellant: {powder_name}\n"
+                out += f"Muzzle Velocity: {res.muzzle_velocity:.1f} m/s\n"
+                out += f"Peak Pressure:   {res.peak_pressure / 1e6:.1f} MPa\n"
+                out += f"Fraction Burned: {res.fraction_burned[-1]*100.0:.1f}%\n"
+                self.text_output.setText(out)
+
+                # Plot P-T Curve
+                self.canvas.ax_side.clear()
+                self.canvas.ax_top.clear()
+
+                # We will just reuse the top/side axes for interior plotting temporarily
+                self.canvas.ax_side.plot(res.travel_m, res.pressure_pa / 1e6, 'b-')
+                self.canvas.ax_side.set_title('Pressure Curve')
+                self.canvas.ax_side.set_xlabel('Travel (m)')
+                self.canvas.ax_side.set_ylabel('Pressure (MPa)')
+                self.canvas.ax_side.grid(True)
+
+                self.canvas.ax_top.plot(res.travel_m, res.velocity_ms, 'g-')
+                self.canvas.ax_top.set_title('Velocity Curve')
+                self.canvas.ax_top.set_xlabel('Travel (m)')
+                self.canvas.ax_top.set_ylabel('Velocity (m/s)')
+                self.canvas.ax_top.grid(True)
+
+                self.canvas.draw()
+            else:
+                self.text_output.setText("Interior Solver Failed.")
+        except Exception as e:
+            self.text_output.setText(f"ERROR in Interior Ballistics: {e}")
+
+    def calculate_solution(self):
+        self.btn_calc.setText("Calculating (Please wait)...")
+        self.btn_calc.setEnabled(False)
+        self.text_output.setText("Running 6-DoF Optimization...")
+        QApplication.processEvents()
+
+        # Save state to memory model
+        self.populate_project_from_gui()
+        state = self.project.state
+
+        try:
+            # Re-read from state model
+            mass = state["projectile"]["mass_kg"]
+            diam = state["projectile"]["diameter_m"]
+            v0 = state["projectile"]["muzzle_velocity_ms"]
+            spin = state["projectile"]["spin_rate_rads"]
+
+            # Simple inertia fallback (if STL wasn't loaded)
+            ix = 0.5 * mass * (diam/2)**2
+            iy = ix * 10.0
+
+            # If STL path exists, calculate real inertia
+            stl_path = state["projectile"].get("custom_stl_path", "")
+            if stl_path and os.path.exists(stl_path):
+                stl_proj = Projectile.from_stl(stl_path, density_kg_m3=11340.0)
+                ix, iy = stl_proj.i_x, stl_proj.i_y
+
+            proj = Projectile(mass=mass, diameter=diam, i_x=ix, i_y=iy)
+
+            if "G7" in state["projectile"]["aero_model"]:
+                aero = Aerodynamics.g7()
+            else:
+                aero = Aerodynamics.g1()
+
+            env_earth = EarthModel()
+
+            wind = WindProfile()
+            w_speed = state["environment"]["wind_speed_ms"]
+            w_dir = state["environment"]["wind_direction_deg"]
+            if w_speed > 0:
+                wind.set_wind_layers_polar([0], [w_speed], [w_dir])
+
+            solver = Solver6DoF(proj, aero, self.current_atm, env_earth, environment_wind=wind)
+            targeting = TargetingSystem(solver)
+
+            tx = state["target"]["x_m"]
+            ty = state["target"]["y_m"]
+            tz = state["target"]["z_m"]
+
+            # Run Targeting
+            res = targeting.find_firing_solution(
+                [tx, ty, tz], v0, spin,
+                penetration_model='demarre'
+            )
+
+            if res.success:
+                out = "--- FIRING SOLUTION FOUND ---\n"
+                out += f"Elevation (Pitch): {np.rad2deg(res.pitch):.3f} degrees\n"
+                out += f"Azimuth (Yaw):     {np.rad2deg(res.yaw):.3f} degrees\n"
+                out += f"Time of Flight:    {res.time_of_flight:.2f} seconds\n"
+                out += f"Terminal Velocity: {res.terminal_velocity:.1f} m/s\n"
+                out += f"Terminal Energy:   {res.terminal_energy / 1000.0:.1f} kJ\n"
+                if res.penetration_mm:
+                    out += f"Armor Penetration: {res.penetration_mm:.1f} mm (De Marre)\n"
+
+                self.text_output.setText(out)
+                self.canvas.plot_trajectory(res.trajectory)
+            else:
+                self.text_output.setText(f"FAILED TO FIND SOLUTION: {res.message}")
+
+        except Exception as e:
+            self.text_output.setText(f"ERROR: {e}")
+
+        finally:
+            self.btn_calc.setText("Calculate Firing Solution")
+            self.btn_calc.setEnabled(True)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = BallisticsGUI()
+    window.show()
+    sys.exit(app.exec())
