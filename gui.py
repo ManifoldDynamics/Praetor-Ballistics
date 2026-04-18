@@ -144,6 +144,9 @@ class BallisticsGUI(QMainWindow):
 
         # Build Screens
         self.build_main_menu()
+        self.build_projectile_selection()
+        self.build_firearm_designer()
+        self.build_projectile_designer()
         self.build_calculator()
 
         # Build Menu Bar
@@ -152,9 +155,99 @@ class BallisticsGUI(QMainWindow):
         # Start on Main Menu
         self.build_aero_predictor()
 
+        self.page_index_main = 0
+        self.page_index_proj_sel = 1
+        self.page_index_firearm = 2
+        self.page_index_proj_des = 3
+        self.page_index_calc = 4
+        self.page_index_aero = 5
         self.stacked_widget.setCurrentIndex(0)
 
-    def build_aero_predictor(self):
+
+    def build_projectile_selection(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        title = QLabel("Step 1: Select Projectile Category")
+        title.setStyleSheet("font-size: 24px; font-weight: bold; margin-bottom: 30px;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        btn_small = QPushButton("Small Arms (Rifle/Pistol)")
+        btn_small.setFixedSize(300, 50)
+        btn_small.clicked.connect(lambda: self.select_category("small"))
+        layout.addWidget(btn_small, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        btn_arty = QPushButton("Artillery (Howitzer/Cannon)")
+        btn_arty.setFixedSize(300, 50)
+        btn_arty.clicked.connect(lambda: self.select_category("artillery"))
+        layout.addWidget(btn_arty, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        btn_missile = QPushButton("Missile / Guided Munition")
+        btn_missile.setFixedSize(300, 50)
+        btn_missile.clicked.connect(lambda: self.select_category("missile"))
+        layout.addWidget(btn_missile, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        btn_back = QPushButton("Back to Main Menu")
+        btn_back.setFixedSize(150, 30)
+        btn_back.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(self.page_index_main))
+        layout.addWidget(btn_back, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.stacked_widget.insertWidget(1, widget)
+
+    def select_category(self, cat):
+        # We can prepopulate fields here based on category if needed
+        self.stacked_widget.setCurrentIndex(self.page_index_firearm)
+
+    def build_firearm_designer(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        title = QLabel("Step 2: Firearm & Barrel Designer")
+        title.setStyleSheet("font-size: 24px; font-weight: bold;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        # We will move the group_int here from calculator later
+        self.firearm_layout = QVBoxLayout()
+        layout.addLayout(self.firearm_layout)
+
+        nav_layout = QHBoxLayout()
+        btn_back = QPushButton("Back")
+        btn_back.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(self.page_index_proj_sel))
+        btn_next = QPushButton("Next")
+        btn_next.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(self.page_index_proj_des))
+        nav_layout.addWidget(btn_back)
+        nav_layout.addWidget(btn_next)
+
+        layout.addLayout(nav_layout)
+        self.stacked_widget.insertWidget(2, widget)
+
+    def build_projectile_designer(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        title = QLabel("Step 3: Projectile Designer")
+        title.setStyleSheet("font-size: 24px; font-weight: bold;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        self.proj_layout = QVBoxLayout()
+        layout.addLayout(self.proj_layout)
+
+        nav_layout = QHBoxLayout()
+        btn_back = QPushButton("Back")
+        btn_back.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(self.page_index_firearm))
+        btn_next = QPushButton("Next (Simulation Dashboard)")
+        btn_next.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(self.page_index_calc))
+        nav_layout.addWidget(btn_back)
+        nav_layout.addWidget(btn_next)
+
+        layout.addLayout(nav_layout)
+        self.stacked_widget.insertWidget(3, widget)
+
+def build_aero_predictor(self):
         self.aero_widget = QWidget()
         layout = QVBoxLayout(self.aero_widget)
 
@@ -193,7 +286,7 @@ class BallisticsGUI(QMainWindow):
         self.canvas_aero.ax_top.set_visible(False)
         layout.addWidget(self.canvas_aero)
 
-        self.stacked_widget.addWidget(self.aero_widget) # Index 2
+        self.stacked_widget.insertWidget(5, self.aero_widget)
 
     def build_menubar(self):
         menubar = self.menuBar()
@@ -251,7 +344,7 @@ class BallisticsGUI(QMainWindow):
         btn_open.clicked.connect(self.open_project)
         layout.addWidget(btn_open, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        self.stacked_widget.addWidget(menu_widget) # Index 0
+        self.stacked_widget.insertWidget(0, menu_widget)
 
     def build_calculator(self):
         calc_widget = QWidget()
@@ -518,7 +611,7 @@ class BallisticsGUI(QMainWindow):
         main_layout.addWidget(left_panel)
         main_layout.addWidget(right_panel)
 
-        self.stacked_widget.addWidget(calc_widget) # Index 1
+        self.stacked_widget.insertWidget(4, calc_widget)
 
     def populate_gui_from_project(self):
         state = self.project.state
@@ -680,7 +773,8 @@ class BallisticsGUI(QMainWindow):
     def new_project(self):
         self.project = BallisticsProject()
         self.populate_gui_from_project()
-        self.stacked_widget.setCurrentIndex(1)
+        # Navigate to the new Projectile Selection screen instead of calculator
+        self.stacked_widget.setCurrentIndex(self.page_index_proj_sel)
         self.setWindowTitle("Wilson Ballistic Suite - New Project")
 
     def open_project(self):
