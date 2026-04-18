@@ -8,6 +8,16 @@ class BallisticsProject:
     def __init__(self):
         # Default state
         self.state = {
+            "gun_barrel": {
+                "chamber_vol_m3": 0.018,
+                "barrel_len_m": 5.0,
+                "propellant": "Generic Triple-Base (Artillery)",
+                "charge_mass_kg": 12.0,
+                "web_thickness_m": 0.003,
+                "twist_rate_in_per_turn": 10.0,
+                "engraving_force_n": 5000.0,
+                "bore_friction_n": 1000.0
+            },
             "projectile": {
                 "mass_kg": 43.0,
                 "diameter_m": 0.155,

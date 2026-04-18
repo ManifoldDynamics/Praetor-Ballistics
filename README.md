@@ -93,6 +93,38 @@ print(f"Time of Flight: {sol.t[-1]:.2f} s")
 print(f"Impact Range: {sol.y[0, -1]:.2f} m")
 ```
 
+
+## Interior Ballistics Thermodynamics
+
+WBS includes an advanced lumped-parameter thermodynamic solver (`InteriorSolver`) to predict the pressure curve and muzzle velocity of a weapon system before the bullet even leaves the barrel.
+
+```python
+from ballistics.interior_ballistics import GunSystem, Charge
+from ballistics.propellants import Propellant
+from ballistics.interior_solver import InteriorSolver
+
+# Model a generic 5.56 NATO Rifle (1:7 Twist Rate)
+gun = GunSystem(
+    chamber_volume_m3=0.000002,
+    barrel_length_m=0.5,
+    bore_diameter_m=0.00556,
+    bullet_mass_kg=0.004,
+    bullet_ix_kgm2=1.5e-8,
+    twist_rate_in_per_turn=7.0
+)
+
+# Load a Fast Rifle Propellant from the thermodynamic database
+prop = Propellant("Fast Rifle Powder (Extruded)")
+charge = Charge(propellant=prop, mass_kg=0.0016, web_thickness_m=0.0005)
+
+solver = InteriorSolver(gun, charge)
+res = solver.solve()
+
+print(f"Muzzle Velocity: {res.muzzle_velocity:.1f} m/s")
+print(f"Spin Rate: {res.spin_rate_rads:.1f} rad/s")
+print(f"Peak Pressure: {res.peak_pressure / 1e6:.1f} MPa")
+```
+
 ## Target Intercept (Zeroing)
 
 Instead of guessing launch angles, you can use the `TargetingSystem` to find the exact firing solution needed to hit a specific 3D coordinate.

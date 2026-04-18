@@ -47,7 +47,16 @@ class InteriorSolver:
 
         # Effective mass (accounts for the kinetic energy of the accelerating gas and unburned powder)
         # Typically M_eff = M + C/3
-        M_eff = M + C / 3.0
+        # Also need to account for rotational inertia converting linear energy to rotational energy
+
+        # v_rot = omega * r.
+        # Rotational Energy E_r = 0.5 * Ix * omega^2
+        # Since omega = v * rads_per_meter, E_r = 0.5 * Ix * (v * rads_per_m)^2
+        # We can fold this directly into the effective mass!
+        # E_k_total = 0.5 * m * v^2 + 0.5 * Ix * (rads_per_m)^2 * v^2 = 0.5 * v^2 * (m + Ix * rads_per_m^2)
+        rot_inertia_equivalent_mass = self.gun.bullet_ix_kgm2 * (self.gun.rads_per_meter**2)
+
+        M_eff = M + (C / 3.0) + rot_inertia_equivalent_mass
 
         # Form function for burning: dz/dt = f(z) * burn_rate
         # For a simple geometry (like a cylinder or sphere), form function relates fraction burned z to web remaining
@@ -103,15 +112,29 @@ class InteriorSolver:
 
             # 3. Derivatives
 
-            # Projectile doesn't move until Shot Start Pressure is reached
-            if x <= 0.0 and P < self.P0:
+            # Evaluate friction depending on travel
+            friction_n = 0.0
+            if x <= 0.001:
+                # Bullet is engaging the rifling (high engraving force)
+                friction_n = self.gun.engraving_force_n
+            else:
+                # Bullet is traveling down the bore
+                friction_n = self.gun.bore_friction_n
+
+            # The force pushing the bullet is Base Pressure minus Friction
+            net_force = (P * A) - friction_n
+
+            # Projectile doesn't move until Shot Start Pressure is reached (force > friction)
+            if x <= 0.0 and net_force <= 0.0:
                 dx_dt = 0.0
                 dv_dt = 0.0
             else:
                 dx_dt = v
-                # Force on projectile base = P * A
-                # We could subtract bore friction here. For MVP, we ignore friction after shot start.
-                dv_dt = (P * A) / M_eff
+                # Ensure we don't accidentally decelerate back into the chamber
+                if v <= 0.0 and net_force < 0.0:
+                    dv_dt = 0.0
+                else:
+                    dv_dt = net_force / M_eff
 
             dz_dt = dz_dt_func(P, z)
 
@@ -153,6 +176,10 @@ class InteriorSolver:
 
         pressures = np.array(pressures)
 
+        # Calculate final spin rate
+        final_velocity = sol.y[1, -1] if len(sol.y[1]) > 0 else 0.0
+        final_spin = final_velocity * self.gun.rads_per_meter
+
         return InteriorResult(
             success=sol.success,
             t=times,
@@ -160,5 +187,6 @@ class InteriorSolver:
             v_ms=sol.y[1, :],
             x_m=sol.y[0, :],
             z_frac=sol.y[2, :],
-            message=sol.message
+            message=sol.message,
+            spin_rads=final_spin
         )

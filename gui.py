@@ -263,11 +263,14 @@ class BallisticsGUI(QMainWindow):
         left_panel.setFixedWidth(350)
 
         # Interior Ballistics Inputs
-        group_int = QGroupBox("Interior Ballistics (Gun & Charge)")
+        group_int = QGroupBox("Interior Ballistics & Barrel Designer")
         form_int = QFormLayout()
 
         self.input_chamber_vol = QLineEdit("0.018")
         self.input_barrel_len = QLineEdit("5.0")
+        self.input_twist = QLineEdit("10.0")
+        self.input_engrave_n = QLineEdit("5000.0")
+        self.input_frict_n = QLineEdit("1000.0")
 
         self.combo_powder = QComboBox()
         self.combo_powder.addItems(list(PROPELLANT_DATABASE.keys()))
@@ -275,12 +278,15 @@ class BallisticsGUI(QMainWindow):
         self.input_charge_mass = QLineEdit("12.0")
         self.input_web = QLineEdit("0.003")
 
-        self.btn_calc_int = QPushButton("Calculate Muzzle Velocity")
+        self.btn_calc_int = QPushButton("Calculate Muzzle Velocity & Spin")
         self.btn_calc_int.setStyleSheet("background-color: darkblue; color: white;")
         self.btn_calc_int.clicked.connect(self.calculate_interior)
 
         form_int.addRow("Chamber Vol (m^3):", self.input_chamber_vol)
         form_int.addRow("Barrel Len (m):", self.input_barrel_len)
+        form_int.addRow("Rifling Twist (1:X in):", self.input_twist)
+        form_int.addRow("Engraving Force (N):", self.input_engrave_n)
+        form_int.addRow("Sliding Friction (N):", self.input_frict_n)
         form_int.addRow("Propellant Type:", self.combo_powder)
         form_int.addRow("Charge Mass (kg):", self.input_charge_mass)
         form_int.addRow("Web Thickness (m):", self.input_web)
@@ -517,6 +523,21 @@ class BallisticsGUI(QMainWindow):
     def populate_gui_from_project(self):
         state = self.project.state
 
+        # Gun Barrel
+        gb = state.get("gun_barrel", {})
+        self.input_chamber_vol.setText(str(gb.get("chamber_vol_m3", 0.018)))
+        self.input_barrel_len.setText(str(gb.get("barrel_len_m", 5.0)))
+
+        pw_idx = self.combo_powder.findText(gb.get("propellant", "Generic Triple-Base (Artillery)"))
+        if pw_idx >= 0:
+            self.combo_powder.setCurrentIndex(pw_idx)
+
+        self.input_charge_mass.setText(str(gb.get("charge_mass_kg", 12.0)))
+        self.input_web.setText(str(gb.get("web_thickness_m", 0.003)))
+        self.input_twist.setText(str(gb.get("twist_rate_in_per_turn", 10.0)))
+        self.input_engrave_n.setText(str(gb.get("engraving_force_n", 5000.0)))
+        self.input_frict_n.setText(str(gb.get("bore_friction_n", 1000.0)))
+
         # Projectile
         p = state.get("projectile", {})
         self.input_mass.setText(str(p.get("mass_kg", 43.0)))
@@ -595,6 +616,15 @@ class BallisticsGUI(QMainWindow):
     def populate_project_from_gui(self):
         state = self.project.state
         try:
+            state["gun_barrel"]["chamber_vol_m3"] = float(self.input_chamber_vol.text())
+            state["gun_barrel"]["barrel_len_m"] = float(self.input_barrel_len.text())
+            state["gun_barrel"]["propellant"] = self.combo_powder.currentText()
+            state["gun_barrel"]["charge_mass_kg"] = float(self.input_charge_mass.text())
+            state["gun_barrel"]["web_thickness_m"] = float(self.input_web.text())
+            state["gun_barrel"]["twist_rate_in_per_turn"] = float(self.input_twist.text())
+            state["gun_barrel"]["engraving_force_n"] = float(self.input_engrave_n.text())
+            state["gun_barrel"]["bore_friction_n"] = float(self.input_frict_n.text())
+
             state["projectile"]["mass_kg"] = float(self.input_mass.text())
             state["projectile"]["diameter_m"] = float(self.input_diam.text())
             state["projectile"]["muzzle_velocity_ms"] = float(self.input_v0.text())
@@ -762,12 +792,22 @@ class BallisticsGUI(QMainWindow):
             barrel_len = float(self.input_barrel_len.text())
             bore_diam = float(self.input_diam.text())
             proj_mass = float(self.input_mass.text())
+            twist = float(self.input_twist.text())
+            engrave = float(self.input_engrave_n.text())
+            frict = float(self.input_frict_n.text())
+
+            # Simple inertia fallback for spin calculation
+            ix = 0.5 * proj_mass * (bore_diam/2)**2
 
             powder_name = self.combo_powder.currentText()
             charge_mass = float(self.input_charge_mass.text())
             web_thick = float(self.input_web.text())
 
-            gun = GunSystem(chamber_vol, barrel_len, bore_diam, proj_mass)
+            gun = GunSystem(
+                chamber_vol, barrel_len, bore_diam, proj_mass,
+                bullet_ix_kgm2=ix, twist_rate_in_per_turn=twist,
+                engraving_force_n=engrave, bore_friction_n=frict
+            )
             prop = Propellant(powder_name)
             charge = Charge(prop, charge_mass, web_thick)
 
@@ -776,9 +816,12 @@ class BallisticsGUI(QMainWindow):
 
             if res.success:
                 self.input_v0.setText(f"{res.muzzle_velocity:.1f}")
-                out = "--- INTERIOR BALLISTICS ---\n"
+                self.input_spin.setText(f"{res.spin_rate_rads:.1f}")
+
+                out = "--- INTERIOR BALLISTICS & BARREL ---\n"
                 out += f"Propellant: {powder_name}\n"
                 out += f"Muzzle Velocity: {res.muzzle_velocity:.1f} m/s\n"
+                out += f"Spin Rate:       {res.spin_rate_rads:.1f} rad/s\n"
                 out += f"Peak Pressure:   {res.peak_pressure / 1e6:.1f} MPa\n"
                 out += f"Fraction Burned: {res.fraction_burned[-1]*100.0:.1f}%\n"
                 self.text_output.setText(out)

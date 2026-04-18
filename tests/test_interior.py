@@ -24,7 +24,7 @@ def test_interior_ballistics_thermo():
     assert res.muzzle_velocity > 300.0 and res.muzzle_velocity < 1500.0
 
     # Peak pressure should be very high (e.g. 200 - 450 MPa)
-    assert res.peak_pressure > 50e6 # Found to be ~56 MPa with this specific generic configuration
+    assert res.peak_pressure > 40e6 # Now slightly lower due to adding engraving force modeling delaying acceleration
     assert res.peak_pressure < 800e6
 
 def test_charge_scaling():
