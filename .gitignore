@@ -8,3 +8,5 @@ virtual_tank.stl
 *.egg-info/
 build/
 dist/
+wbs_cfd_3d*.so
+wbs_cfd_3d*.pyd

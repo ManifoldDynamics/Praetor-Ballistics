@@ -6,7 +6,11 @@ ext_modules = [
     Pybind11Extension(
         "wbs_core",
         ["wbs_core/eom.cpp"],
-        # Example: passing in compiler flags
+        cxx_std=11,
+    ),
+    Pybind11Extension(
+        "wbs_cfd_3d",
+        ["wbs_core/cfd_3d.cpp"],
         cxx_std=11,
     ),
 ]

@@ -22,6 +22,7 @@ A deep, 6-Degree-of-Freedom (6-DoF) true physics-based ballistics engine utilizi
   - Standard Reference Models (G1 and G7 functions included out-of-the-box)
   - Custom user-defined tabular data via CSV parsing.
   - **Empirical Aero Predictor**: Automatically generates Mach-dependent Drag ($C_D$) and Lift ($C_L$) curves using Modified Newtonian Impact Theory and Korst base pressure equations, based solely on the projectile's nose, body, and boattail dimensions.
+  - **True 3D CFD (Navier-Stokes) Solver**: Execute a native C++ 3D Cartesian Finite Volume Method (FVM) solver directly from the GUI to calculate the exact pressure drag and lift coefficients over a custom STL mesh at any given Mach number, complete with supersonic shockwave capturing.
 - **CAD Integration**: Ingest STL files directly to automatically calculate the projectile's Mass, Reference Area (Caliber), and Principal Moments of Inertia ($I_x$, $I_y$) based on material density.
 
 ## Installation

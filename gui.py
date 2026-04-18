@@ -313,6 +313,11 @@ class BallisticsGUI(QMainWindow):
         self.btn_aero_predict.clicked.connect(self.open_aero_predictor)
         form_proj.addRow(self.btn_aero_predict)
 
+        self.btn_run_cfd = QPushButton("Run True 3D CFD")
+        self.btn_run_cfd.setStyleSheet("background-color: darkcyan; color: white; font-weight: bold;")
+        self.btn_run_cfd.clicked.connect(self.run_cfd_pipeline)
+        form_proj.addRow(self.btn_run_cfd)
+
         group_proj.setLayout(form_proj)
         left_layout.addWidget(group_proj)
 
@@ -358,6 +363,14 @@ class BallisticsGUI(QMainWindow):
         self.input_tgt_armor = QLineEdit("10.0")
         self.btn_load_tgt_stl = QPushButton("Load Target STL...")
         self.btn_load_tgt_stl.clicked.connect(self.load_target_stl)
+
+        # We need a new panel for CFD input params
+        self.input_cfd_mach = QLineEdit("2.0")
+        self.input_cfd_alt = QLineEdit("0.0")
+        self.input_cfd_res = QLineEdit("30")
+        form_proj.addRow("CFD Mach:", self.input_cfd_mach)
+        form_proj.addRow("CFD Altitude (m):", self.input_cfd_alt)
+        form_proj.addRow("CFD Voxel Res:", self.input_cfd_res)
 
         form_leth.addRow("Explosive Type:", self.combo_exp)
         form_leth.addRow("Explosive Mass (kg):", self.input_exp_mass)
@@ -1018,6 +1031,60 @@ class BallisticsGUI(QMainWindow):
         finally:
             self.btn_leth.setText("Run Lethality Analysis")
             self.btn_leth.setEnabled(True)
+
+    def run_cfd_pipeline(self):
+        self.btn_run_cfd.setText("Running 3D CFD...")
+        self.btn_run_cfd.setEnabled(False)
+        self.text_output.setText("Voxelizing mesh and executing C++ Navier-Stokes Solver. This may take a minute...")
+        QApplication.processEvents()
+
+        try:
+            self.populate_project_from_gui()
+            state = self.project.state
+
+            stl_path = state["projectile"].get("custom_stl_path", "")
+            if not stl_path or not os.path.exists(stl_path):
+                raise ValueError("You must load a Custom CAD (STL) file before running CFD.")
+
+            mach = float(self.input_cfd_mach.text())
+            altitude = float(self.input_cfd_alt.text())
+            res_val = int(self.input_cfd_res.text())
+
+            from ballistics.cfd_pipeline import CFDPipeline
+            from ballistics.environment import StandardAtmosphere
+
+            pipeline = CFDPipeline(stl_path, pitch_deg=0.0)
+
+            # Run C++ Solver
+            res = pipeline.run_simulation(mach, altitude, self.current_atm, grid_resolution=res_val)
+
+            out = "--- 3D CFD ANALYSIS COMPLETE ---\n"
+            out += f"Grid Dimensions: {res['pressure_slice_z'].shape}\n"
+            out += f"Freestream Mach: {mach}\n"
+            out += f"Calculated Drag Force: {res['drag_force']:.2f} N\n"
+            out += f"Calculated Lift Force: {res['lift_force']:.2f} N\n"
+            out += f"Calculated Form Cd: {res['cd']:.4f}\n"
+
+            self.text_output.setText(out)
+
+            # Visualize the pressure slice
+            self.canvas_traj.reset_layout()
+            self.canvas_traj.ax_side.clear()
+            self.canvas_traj.ax_top.clear()
+
+            self.canvas_traj.ax_side.imshow(res['pressure_slice_z'].T, cmap='jet', origin='lower')
+            self.canvas_traj.ax_side.set_title(f'Midplane Pressure Slice (Mach {mach})')
+            self.canvas_traj.ax_side.set_xlabel('X (voxels)')
+            self.canvas_traj.ax_side.set_ylabel('Y (voxels)')
+
+            self.canvas_traj.draw()
+            self.tabs.setCurrentIndex(0)
+
+        except Exception as e:
+            self.text_output.setText(f"CFD ERROR: {e}")
+        finally:
+            self.btn_run_cfd.setText("Run True 3D CFD")
+            self.btn_run_cfd.setEnabled(True)
 
     def run_monte_carlo(self):
         self.btn_mc.setText("Running Monte Carlo...")
