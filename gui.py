@@ -247,7 +247,7 @@ class BallisticsGUI(QMainWindow):
         layout.addLayout(nav_layout)
         self.stacked_widget.insertWidget(3, widget)
 
-def build_aero_predictor(self):
+    def build_aero_predictor(self):
         self.aero_widget = QWidget()
         layout = QVBoxLayout(self.aero_widget)
 
