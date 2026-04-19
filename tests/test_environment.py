@@ -2,7 +2,8 @@ import numpy as np
 from ballistics.environment import StandardAtmosphere, EarthModel
 
 def test_atmosphere_sea_level():
-    props = StandardAtmosphere.get_properties(0)
+    atm = StandardAtmosphere() # Use instance in V2
+    props = atm.get_properties(0)
     assert np.isclose(props['temperature'], 288.15)
     assert np.isclose(props['pressure'], 101325.0)
     assert np.isclose(props['density'], 1.225, atol=0.001)
@@ -10,7 +11,8 @@ def test_atmosphere_sea_level():
     assert np.isclose(props['speed_of_sound'], 340.294, atol=0.01)
 
 def test_atmosphere_tropopause():
-    props = StandardAtmosphere.get_properties(11000)
+    atm = StandardAtmosphere()
+    props = atm.get_properties(11000)
     # ~216.65 K, 22632 Pa, 0.3639 kg/m^3
     assert np.isclose(props['temperature'], 216.65)
     assert np.isclose(props['pressure'], 22632, atol=1.0)

@@ -1,2 +1,12 @@
 __pycache__/
 *.pyc
+trajectory_output.csv
+test_bullet.stl
+virtual_tank.stl
+*.so
+*.pyd
+*.egg-info/
+build/
+dist/
+wbs_cfd_3d*.so
+wbs_cfd_3d*.pyd

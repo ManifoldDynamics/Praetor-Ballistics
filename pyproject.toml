@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=42", "wheel", "pybind11>=2.6.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wilson-ballistic-suite"
+version = "1.0.0"
+description = "Deep physics 6-DoF ballistics engine."
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "requests",
+    "trimesh",
+    "rtree",
+    "pyvista",
+    "PyQt6"
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["ballistics"]
