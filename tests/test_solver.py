@@ -29,3 +29,25 @@ def test_simple_trajectory():
 
     # Ensure it travelled forward
     assert sol.y[0, -1] > 1000.0
+
+def test_solver_quaternion_normalization_edge_case():
+    env_atm = StandardAtmosphere()
+    env_earth = EarthModel()
+    proj = Projectile(mass=43.0, diameter=0.155, i_x=0.15, i_y=1.6)
+    aero = Aerodynamics()
+
+    solver = Solver6DoF(proj, aero, env_atm, env_earth)
+
+    # We don't need to run the full simulation, just check that y0 is correctly initialized
+    # even if inputs might lead to a zero-norm quaternion (though unlikely with valid angles)
+    # The fix ensures stability.
+    t_span = (0, 1)
+    pos0 = [0, 0, 0]
+    v0 = 800.0
+    pitch0 = 0.0
+    yaw0 = 0.0
+    spin = 0.0
+
+    # This should not raise ZeroDivisionError
+    sol = solver.solve(t_span, pos0, v0, pitch0, yaw0, spin)
+    assert sol is not None

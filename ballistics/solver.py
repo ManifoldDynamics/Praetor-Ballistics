@@ -31,7 +31,12 @@ class Solver6DoF:
         q2 = cr * sp * cy + sr * cp * sy
         q3 = cr * cp * sy - sr * sp * cy
         q_init = np.array([q0, q1, q2, q3])
-        q_init = q_init / np.linalg.norm(q_init)
+
+        q_norm = np.linalg.norm(q_init)
+        if q_norm > 1e-12:
+            q_init = q_init / q_norm
+        else:
+            q_init = np.array([1.0, 0.0, 0.0, 0.0])
 
         omega0 = np.array([spin_rate, 0.0, 0.0])
 
