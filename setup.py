@@ -13,6 +13,11 @@ ext_modules = [
         ["wbs_core/cfd_3d.cpp"],
         cxx_std=11,
     ),
+    Pybind11Extension(
+        "wbs_cfd_v2",
+        ["wbs_core/cfd_v2.cpp"],
+        cxx_std=11,
+    ),
 ]
 
 setup(
