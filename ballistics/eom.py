@@ -155,17 +155,21 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     # Active Propulsion / Time-Varying Mass
     m = projectile.mass
     thrust_n = 0.0
-    if propulsion is not None and propulsion.get('active', False):
+
+    # Support V2 Proprietary Rocket Motor
+    if hasattr(propulsion, 'get_thrust_and_mdot'):
+        thrust_n, _ = propulsion.get_thrust_and_mdot(t, atm['pressure'])
+        m = propulsion.get_current_mass(t, projectile.mass)
+    elif propulsion is not None and propulsion.get('active', False):
+        # Fallback to V1
         burn_t = propulsion.get('burn_time_s', 0.0)
         p_mass = propulsion.get('propellant_mass_kg', 0.0)
         max_t = propulsion.get('thrust_n', 0.0)
 
         if t <= burn_t and burn_t > 0:
             thrust_n = max_t
-            # Mass decreases linearly as propellant burns
             m = projectile.mass - p_mass * (t / burn_t)
         else:
-            # Burnout complete
             thrust_n = 0.0
             m = projectile.mass - p_mass
 
@@ -204,18 +208,21 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
 
     M_aero_body = np.array([C_l, C_m + C_m_mag, C_n + C_n_mag]) * q_dyn * S * d
 
-    # Active Guidance Control (Thrust Vectoring / Divert Thrusters)
-    # We apply the commanded lateral acceleration directly to the Earth frame
-    # to simulate a highly responsive guidance system.
+    # Active Guidance Control
     F_guide_earth = np.zeros(3)
 
     if guidance is not None and target_state is not None:
         t_pos = np.array(target_state['pos']) + np.array(target_state['vel']) * t
         t_vel = np.array(target_state['vel'])
 
-        a_cmd_earth = guidance.get_commanded_acceleration(t, pos, vel, t_pos, t_vel)
+        # Support V2 Guidance Laws
+        if hasattr(guidance, 'augmented_pronav'):
+            t_accel = target_state.get('accel', np.zeros(3))
+            a_cmd_earth = guidance.augmented_pronav(t, pos, vel, t_pos, t_vel, t_accel)
+        else:
+            # Fallback to V1
+            a_cmd_earth = guidance.get_commanded_acceleration(t, pos, vel, t_pos, t_vel)
 
-        # F = m * a
         F_guide_earth = m * a_cmd_earth
 
     # Magnus Force (Spin drift)

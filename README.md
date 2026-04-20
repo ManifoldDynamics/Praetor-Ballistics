@@ -26,6 +26,13 @@ State-of-the-art lethality modeling for fragmentation warheads:
 - **Mott Fragmentation Distribution**: Stochastic fragment mass sampling based on casing material and explosive properties.
 - **Ray-Traced Lethality**: Integrates with `trimesh` to perform high-fidelity fragment-target interaction simulations in 3D.
 
+### 4. Active Propulsion & Guidance (V2)
+Advanced flight control for smart munitions and missiles:
+- **Multi-Stage Rocket Motors**: Supports discrete thrust profiles and mass-decay for booster/sustainer configurations.
+- **Atmospheric Pressure Correction**: Proprietary thrust calculation ($F = F_{sl} + (P_{sl} - P_a) A_e$) for varying altitudes.
+- **Augmented Proportional Navigation (APN)**: Advanced guidance law that compensates for target maneuvering acceleration.
+- **Optimal Guidance Law (OGL)**: Minimizes control effort while maintaining zero-miss distance performance.
+
 ## Key Features
 
 - **Hybrid C++/Python Architecture:** Heavy differential equation derivatives and 3D CFD finite-volume grids are evaluated in native C++.
@@ -65,10 +72,14 @@ from ballistics.projectile import Aerodynamics
 aero = Aerodynamics.from_predictor_v2(geometry)
 ```
 
-### V2 Terminal Ballistics
+### V2 Guidance & Propulsion
 
 ```python
-from ballistics.terminal_v2 import TerminalBallisticsV2
-layers = [{'thickness_mm': 10, 'type': 'era'}, {'thickness_mm': 20, 'type': 'rha'}]
-res = TerminalBallisticsV2.multi_layer_penetration(v_impact=1200, m_frag=0.05, d_frag=0.01, layers=layers)
+from ballistics.propulsion_v2 import RocketMotorV2
+from ballistics.guidance_v2 import GuidanceV2
+
+stages = [{'thrust_sl_n': 5000, 'burn_time_s': 2.0, 'propellant_mass_kg': 10, 'exit_area_m2': 0.05}]
+motor = RocketMotorV2(stages)
+guidance = GuidanceV2(nav_constant=4.0)
+# ... solver automatically utilizes V2 components if passed to Solver6DoF ...
 ```
