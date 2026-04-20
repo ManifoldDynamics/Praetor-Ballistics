@@ -13,42 +13,44 @@ The V2 Interior Solver moves beyond simple energy conservation, implementing:
 
 ### 2. High-Fidelity Aerodynamics Engine (V2)
 Our new proprietary aero-predictor replaces Mach-based lookups with geometric physics:
-- **Van Driest II Transformation**: Calculates compressible turbulent skin friction, essential for high-transonic and supersonic stability.
-- **Sutherland’s Law Integration**: Dynamic viscosity is computed based on local air temperature, improving Reynolds number fidelity.
-- **Shock-Expansion Correlation**: A proprietary model for supersonic wave drag that outranks traditional Modified Newtonian Impact Theory.
+- **Van Driest II Transformation**: Calculates compressible turbulent skin friction.
+- **Shock-Expansion Correlation**: A proprietary model for supersonic wave drag.
 - **Korst-McCoy Base Pressure**: Accurate modeling of base drag and boattail flow separation.
 
 ### 3. Terminal Ballistics & Lethality (V2)
-State-of-the-art lethality modeling for fragmentation warheads:
-- **Multi-Layer Armor Penetration**: Simulates perforation through spaced armor and Explosive Reactive Armor (ERA) using the Thor empirical suite.
-- **Lambert Correlation**: Predicts fragment residual velocity and mass loss during target perforation.
+State-of-the-art lethality modeling:
+- **Multi-Layer Armor Penetration**: Simulates perforation through spaced armor and ERA using the Thor empirical suite.
 - **Mott Fragmentation Distribution**: Stochastic fragment mass sampling based on casing material and explosive properties.
 
 ### 4. Active Propulsion & Guidance (V2)
-Advanced flight control for smart munitions and missiles:
-- **Multi-Stage Rocket Motors**: Supports discrete thrust profiles and mass-decay for booster/sustainer configurations.
-- **Atmospheric Pressure Correction**: Proprietary thrust calculation ($F = F_{sl} + (P_{sl} - P_a) A_e$) for varying altitudes.
+Advanced flight control for smart munitions:
+- **Multi-Stage Rocket Motors**: Supports discrete thrust profiles and mass-decay.
 - **Augmented Proportional Navigation (APN)**: Advanced guidance law that compensates for target maneuvering acceleration.
 
 ### 5. Advanced Aerothermodynamics (V2)
-High-fidelity thermal modeling for hypersonic flight:
-- **1D Radial Nodal Conduction**: Replaces simple lumped-mass models with a finite-difference radial heat conduction solver.
-- **Internal Thermal Gradients**: Tracks temperature soaking from the outer skin to the internal core across multiple discrete nodes.
-- **Structural Integrity Monitoring**: Allows for precise calculation of thermal stress and structural failure points based on material-specific thermal conductivity.
+High-fidelity thermal modeling:
+- **1D Radial Nodal Conduction**: Finite-difference conduction solver tracking temperature gradients across multiple discrete nodes through the projectile skin.
 
-## Key Features
-
-- **Hybrid C++/Python Architecture:** Heavy differential equation derivatives and 3D CFD finite-volume grids are evaluated in native C++.
-- **6-DoF Physics Solver:** Accurate rigid-body modeling with quaternions and euler-angle stability guards.
-- **Live Weather Integration:** Real-time atmospheric correction via Open-Meteo API.
+### 6. Strategic Targeting & Engagement (V2)
+Proprietary multi-objective intercept optimization:
+- **Predictive Multi-Objective Intercept**: Optimizes trajectories simultaneously for minimum miss distance, specific impact angles (AoA), and maximum terminal kinetic energy.
+- **Engagement Priority Tuning**: Allows the user to weight accuracy vs. lethality (energy) during the targeting solution search.
 
 ## Installation
 
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd ballistics
-
 # Install WBS V2 (compiles the C++ core extensions automatically)
 pip install -e .
+```
+
+## Python API Examples
+
+### V2 Strategic Targeting
+
+```python
+from ballistics.targeting import TargetingSystem
+# ... setup solver ...
+ts = TargetingSystem(solver)
+res = ts.find_firing_solution(target_pos=[5000, 0, 100], v0=850, spin=1800,
+                             version=2, impact_angle_deg=30.0)
 ```

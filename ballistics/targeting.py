@@ -2,6 +2,7 @@ import numpy as np
 from scipy.optimize import root
 
 from ballistics.terminal import TerminalBallistics
+from ballistics.targeting_v2 import PredictiveInterceptSolverV2
 
 class TargetingResult:
     def __init__(self, success, pitch, yaw, time_of_flight, terminal_velocity, terminal_energy, trajectory, message, penetration_mm=None):
@@ -21,8 +22,9 @@ class TargetingSystem:
         Initializes the targeting system with a configured Solver6DoF.
         """
         self.solver = solver
+        self.v2_solver = PredictiveInterceptSolverV2(solver)
 
-    def find_firing_solution(self, target_pos, v0, spin_rate, initial_guess_pitch=None, initial_guess_yaw=0.0, penetration_model=None, penetration_kwargs=None):
+    def find_firing_solution(self, target_pos, v0, spin_rate, initial_guess_pitch=None, initial_guess_yaw=0.0, penetration_model=None, penetration_kwargs=None, version=1, impact_angle_deg=None):
         """
         Finds the required pitch and yaw angles to hit a 3D target coordinate.
 
@@ -35,6 +37,15 @@ class TargetingSystem:
         x_t, y_t, z_t = target_pos
         if penetration_kwargs is None:
             penetration_kwargs = {}
+
+        if version == 2:
+            res_v2 = self.v2_solver.solve_multi_objective(target_pos, v0, spin_rate, desired_impact_angle_deg=impact_angle_deg)
+            if not res_v2.success:
+                return TargetingResult(False, 0, 0, 0, 0, 0, None, f"V2 Optimization failed: {res_v2.message}")
+            opt_pitch, opt_yaw = res_v2.x
+            # The rest of the logic can reuse the confirmations below
+            initial_guess_pitch = opt_pitch
+            initial_guess_yaw = opt_yaw
 
         # Determine initial guess for pitch using a simple vacuum parabola approximation
         if initial_guess_pitch is None:
