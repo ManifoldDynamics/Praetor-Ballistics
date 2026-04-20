@@ -86,6 +86,7 @@ def quaternion_to_euler(q):
     return yaw, pitch, roll
 
 from ballistics.aerothermodynamics import HypersonicHeating
+from ballistics.aerothermodynamics_v2 import AerothermodynamicsV2
 
 def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None):
     """
@@ -101,8 +102,17 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     q = state[6:10]
     omega = state[10:13] # [p, q, r]
 
-    # Optional 14th state for Aerothermodynamics
-    T_nose = state[13] if len(state) > 13 else 300.0 # Default 300K (27C) if unmodeled
+    # V2: Track multiple temperatures if state vector is large enough
+    num_thermal_nodes = 5
+    if len(state) >= 13 + num_thermal_nodes:
+        t_nodes = state[13:13+num_thermal_nodes]
+        T_surface = t_nodes[0]
+    elif len(state) > 13:
+        T_surface = state[13]
+        t_nodes = None
+    else:
+        T_surface = 300.0
+        t_nodes = None
 
     # Calculate environment variables
     altitude = pos[2]
@@ -285,12 +295,24 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     q_dot_vec = q_dot_mat @ omega
 
     # Aerothermodynamics
+    thermal_derivatives = []
     if len(state) > 13 and hasattr(projectile, 'material') and hasattr(projectile, 'nose_radius_m'):
         q_conv = HypersonicHeating.fay_riddell_heat_flux(atm['density'], v_air_mag, projectile.nose_radius_m)
-        q_rad = HypersonicHeating.radiative_cooling_flux(T_nose, projectile.material.emissivity)
-        dT_dt = HypersonicHeating.calculate_nose_temperature_derivative(q_conv, q_rad, projectile.nose_radius_m, projectile.material)
+        q_rad = HypersonicHeating.radiative_cooling_flux(T_surface, projectile.material.emissivity)
+
+        if t_nodes is not None:
+            # Use V2 Finite Difference model
+            thermal_derivatives = AerothermodynamicsV2.calculate_derivatives(
+                t, t_nodes, q_conv, q_rad, projectile.nose_radius_m,
+                projectile.skin_thickness_m, projectile.material, num_nodes=num_thermal_nodes
+            )
+        else:
+            # Fallback to V1 Lumped Mass model
+            dT_dt = HypersonicHeating.calculate_nose_temperature_derivative(q_conv, q_rad, projectile.nose_radius_m, projectile.material)
+            thermal_derivatives = [dT_dt]
     else:
-        dT_dt = 0.0
+        if len(state) > 13:
+            thermal_derivatives = [0.0] * (len(state) - 13)
 
     state_dot = np.zeros(len(state))
     state_dot[0:3] = vel
@@ -298,7 +320,7 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     state_dot[6:10] = q_dot_vec
     state_dot[10:13] = omega_dot
 
-    if len(state) > 13:
-        state_dot[13] = dT_dt
+    if len(thermal_derivatives) > 0:
+        state_dot[13:13+len(thermal_derivatives)] = thermal_derivatives
 
     return state_dot
