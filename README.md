@@ -10,16 +10,14 @@ V2 marks the transition to a **completely proprietary architecture**, replacing 
 The V2 Interior Solver moves beyond simple energy conservation, implementing convective heat loss and support for multi-perforated propellant grains with progressive-to-degressive burn transitions.
 
 ### 2. High-Fidelity Aerodynamics Engine (V2)
-Our new proprietary aero-predictor replaces Mach-based lookups with geometric physics:
-- **Van Driest II Transformation**: Calculates compressible turbulent skin friction.
-- **Sutherland’s Law Integration**: Dynamic viscosity is computed based on local air temperature.
-- **Shock-Expansion Correlation**: A proprietary model for supersonic wave drag.
-- **Korst-McCoy Base Pressure**: Accurate modeling of base drag.
+Our new proprietary aero-predictor replaces Mach-based lookups with geometric physics including Van Driest II Transformation and Korst-McCoy base pressure modeling.
 
 ### 3. Terminal Ballistics & Lethality (V2)
 State-of-the-art lethality modeling:
 - **Multi-Layer Armor Penetration**: Simulates perforation through spaced armor and ERA using the Thor empirical suite.
-- **Mott Fragmentation Distribution**: Stochastic fragment mass sampling based on casing material and explosive properties.
+- **Dynamic Fracture Mechanics**: Replaces empirical mass distributions with a proprietary physics-based fracture engine.
+- **Mott-Grady High Strain-Rate Breaking**: Predicts casing breakup and fragment size based on explosive energy balance and material toughness.
+- **Stochastic Fragment Properties**: Generates variable fragment shapes and masses using Grady-Kipp statistics.
 
 ### 4. Active Propulsion & Guidance (V2)
 Advanced flight control for smart munitions:
@@ -40,10 +38,9 @@ Next-generation planetary and atmospheric modeling:
 - **Expanded Atmospheric Model**: Proprietary implementation of the full 1976 US Standard Atmosphere up to 100km.
 
 ### 8. Advanced Stochastic Dispersion (V2)
-Next-generation Monte Carlo simulation for precision Munitions:
-- **Gaussian Copula Sampling**: Proprietary implementation for correlated input variance (e.g., modeling the realistic coupling between muzzle velocity and propellant mass).
-- **von Karman Gust Modeling**: Replaces constant wind noise with stochastic non-white turbulence profiles for realistic flight instability.
-- **Bayesian Impact Probability (BIP)**: A high-precision engine for estimating Circular Error Probable (CEP) and Mean Point of Impact (MPI) with Bayesian uncertainty quantification.
+Next-generation Monte Carlo simulation:
+- **Gaussian Copula Sampling**: Models correlated input variance.
+- **von Karman Gust Modeling**: Stochastic non-white turbulence profiles for wind.
 
 ## Installation
 
@@ -54,14 +51,13 @@ pip install -e .
 
 ## Python API Examples
 
-### V2 Monte Carlo Simulation
+### V2 Dynamic Fragmentation
 
 ```python
-from ballistics.monte_carlo import MonteCarloSimulator
-# ... setup simulator ...
-sim = MonteCarloSimulator(base_solver)
-res = sim.run(num_shots=1000, target_plane='vertical', target_distance=2000,
-             base_v0=850, base_pitch_rad=0.5, base_yaw_rad=0, base_spin_rads=1800,
-             sd_v0_ms=2.0, sd_mass_kg=0.01, version=2)
-print(f"Bayesian CEP 50: {res.cep_50:.2f} meters")
+from ballistics.lethality_v2 import FragmentationModelV2
+# Generate fragments using high-strain-rate physics
+material_params = {'toughness': 50000, 'density': 7850, 'sound_speed': 5000}
+masses = FragmentationModelV2.generate_fragments_v2(total_mass=10.0, explosive_v_det=8000,
+                                                   casing_radius=0.05, material_params=material_params,
+                                                   num_fragments=500)
 ```

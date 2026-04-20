@@ -37,11 +37,12 @@ class LethalityRayTracer:
         self.mesh.apply_translation(translation)
 
     def analyze_lethality(self, explosion_pos_m, projectile_vel_m_s, projectile_quat,
-                          fragment_mass_kg, fragment_diam_m, fragment_spray_vectors_body, version=1):
+                          fragment_mass_kg, fragment_diam_m, fragment_spray_vectors_body, version=1, fragment_masses_v2=None):
         """
         Ray traces fragments from the explosion position against the target mesh.
         Returns a LethalityResult.
         """
+        from ballistics.lethality_v2 import FragmentationModelV2
         # Ensure numpy arrays
         explosion_pos = np.array(explosion_pos_m)
         proj_vel = np.array(projectile_vel_m_s)
@@ -90,21 +91,25 @@ class LethalityRayTracer:
                 hit_points.append(loc)
 
                 # Calculate Terminal Velocity of this fragment
-                # We assume no air drag over the short distance between explosion and target for MVP
-                # Distance traveled = norm(loc - origin)
-                # In a real model, we would decay the speed based on drag.
                 frag_speed = speeds[ray_idx]
+
+                # Determine fragment properties for this ray
+                curr_mass = fragment_mass_kg
+                curr_diam = fragment_diam_m
+                if version == 2 and fragment_masses_v2 is not None:
+                    curr_mass = fragment_masses_v2[ray_idx]
+                    _, curr_diam = FragmentationModelV2.get_fragment_properties(curr_mass)
 
                 # Apply Penetration Logic
                 if version == 2:
                     # V2 logic: Thor and multi-layer simulation
                     layers = [{'thickness_mm': self.target_armor_mm, 'material': 'RHA', 'type': 'rha'}]
-                    res_v2 = TerminalBallisticsV2.multi_layer_penetration(frag_speed, fragment_mass_kg, fragment_diam_m, layers)
+                    res_v2 = TerminalBallisticsV2.multi_layer_penetration(frag_speed, curr_mass, curr_diam, layers)
                     is_penetrated = res_v2['success']
                     pen_mm = self.target_armor_mm if is_penetrated else 0.0 # simplified for result
                 else:
                     # V1 logic: De Marre
-                    pen_mm = TerminalBallistics.demarre(frag_speed, fragment_mass_kg, fragment_diam_m, armor_constant=1.0)
+                    pen_mm = TerminalBallistics.demarre(frag_speed, curr_mass, curr_diam, armor_constant=1.0)
                     is_penetrated = pen_mm >= self.target_armor_mm
 
                 if is_penetrated:

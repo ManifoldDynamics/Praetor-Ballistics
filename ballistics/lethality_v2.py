@@ -1,4 +1,5 @@
 import numpy as np
+from ballistics.fracture_v2 import FractureEngineV2
 
 class FragmentationModelV2:
     """
@@ -31,6 +32,15 @@ class FragmentationModelV2:
         # V2 Correction: Confinement increases effective explosive coupling
         v_eff = v_base * (1.0 + 0.05 * confinement_factor)
         return v_eff
+
+    @staticmethod
+    def generate_fragments_v2(total_mass, explosive_v_det, casing_radius, material_params, num_fragments):
+        """
+        Generates fragments using the V2 Fracture Engine (Grady-Kipp physics).
+        """
+        strain_rate = FractureEngineV2.estimate_strain_rate(explosive_v_det, casing_radius, 0.005)
+        masses = FractureEngineV2.sample_grady_kipp_distribution(total_mass, strain_rate, material_params, num_fragments)
+        return masses
 
     @staticmethod
     def get_fragment_properties(mass):
