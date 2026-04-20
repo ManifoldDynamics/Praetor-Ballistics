@@ -8,7 +8,10 @@ def quaternion_to_rotation_matrix(q):
     q0, q1, q2, q3 = q
     # Normalize to avoid numerical drift
     norm = np.linalg.norm(q)
-    q0, q1, q2, q3 = q0/norm, q1/norm, q2/norm, q3/norm
+    if norm > 1e-12:
+        q0, q1, q2, q3 = q0/norm, q1/norm, q2/norm, q3/norm
+    else:
+        q0, q1, q2, q3 = 1.0, 0.0, 0.0, 0.0
 
     R = np.array([
         [q0**2 + q1**2 - q2**2 - q3**2, 2*(q1*q2 - q0*q3),           2*(q1*q3 + q0*q2)],
@@ -46,7 +49,11 @@ def rotation_matrix_to_quaternion(R):
         q3 = 0.25 * S
 
     q = np.array([q0, q1, q2, q3])
-    return q / np.linalg.norm(q)
+    norm = np.linalg.norm(q)
+    if norm > 1e-12:
+        return q / norm
+    else:
+        return np.array([1.0, 0.0, 0.0, 0.0])
 
 
 def quaternion_to_euler(q):
@@ -57,7 +64,10 @@ def quaternion_to_euler(q):
     q0, q1, q2, q3 = q
     # Normalize
     norm = np.linalg.norm(q)
-    q0, q1, q2, q3 = q0/norm, q1/norm, q2/norm, q3/norm
+    if norm > 1e-12:
+        q0, q1, q2, q3 = q0/norm, q1/norm, q2/norm, q3/norm
+    else:
+        q0, q1, q2, q3 = 1.0, 0.0, 0.0, 0.0
 
     # Roll (x-axis rotation)
     sinr_cosp = 2 * (q0 * q1 + q2 * q3)

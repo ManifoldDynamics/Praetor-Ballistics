@@ -132,6 +132,13 @@ class Aerodynamics:
         return cls(cd=(G7_MACH, G7_CD))
 
     @classmethod
+    def from_predictor_v2(cls, geometry, atmosphere=None):
+        """Returns an Aerodynamics instance using the V2 proprietary predictor."""
+        from ballistics.aero_v2 import AeroPredictorV2
+        predictor = AeroPredictorV2(geometry, atmosphere)
+        return predictor.predict_aerodynamics()
+
+    @classmethod
     def from_csv(cls, filepath, kind='linear', bounds_error=False, fill_value='extrapolate'):
         """
         Loads aerodynamic tabular data from a CSV file.
