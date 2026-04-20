@@ -7,20 +7,19 @@ V2 marks the transition to a **completely proprietary architecture**, replacing 
 ## V2 Proprietary Enhancements
 
 ### 1. Advanced Interior Ballistics (V2)
-The V2 Interior Solver moves beyond simple energy conservation, implementing:
-- **Convective Heat Loss**: Models energy dissipation to barrel walls using a pressure-dependent convective coefficient.
-- **Advanced Grain Geometry**: Support for multi-perforated propellant grains with progressive-to-degressive burn transitions (Mott/STANAG compliant).
+The V2 Interior Solver moves beyond simple energy conservation, implementing convective heat loss and support for multi-perforated propellant grains with progressive-to-degressive burn transitions.
 
 ### 2. High-Fidelity Aerodynamics Engine (V2)
 Our new proprietary aero-predictor replaces Mach-based lookups with geometric physics:
 - **Van Driest II Transformation**: Calculates compressible turbulent skin friction.
+- **Sutherland’s Law Integration**: Dynamic viscosity is computed based on local air temperature.
 - **Shock-Expansion Correlation**: A proprietary model for supersonic wave drag.
-- **Korst-McCoy Base Pressure**: Accurate modeling of base drag and boattail flow separation.
+- **Korst-McCoy Base Pressure**: Accurate modeling of base drag.
 
 ### 3. Terminal Ballistics & Lethality (V2)
 State-of-the-art lethality modeling:
-- **Multi-Layer Armor Penetration**: Simulates perforation through spaced armor and ERA using the Thor empirical suite.
-- **Mott Fragmentation Distribution**: Stochastic fragment mass sampling based on casing material and explosive properties.
+- **Multi-Layer Armor Penetration**: Simulates perforation through spaced armor and ERA.
+- **Mott Fragmentation Distribution**: Stochastic fragment mass sampling.
 
 ### 4. Active Propulsion & Guidance (V2)
 Advanced flight control for smart munitions:
@@ -29,28 +28,36 @@ Advanced flight control for smart munitions:
 
 ### 5. Advanced Aerothermodynamics (V2)
 High-fidelity thermal modeling:
-- **1D Radial Nodal Conduction**: Finite-difference conduction solver tracking temperature gradients across multiple discrete nodes through the projectile skin.
+- **1D Radial Nodal Conduction**: Finite-difference conduction solver tracking temperature gradients through the skin.
 
 ### 6. Strategic Targeting & Engagement (V2)
 Proprietary multi-objective intercept optimization:
-- **Predictive Multi-Objective Intercept**: Optimizes trajectories simultaneously for minimum miss distance, specific impact angles (AoA), and maximum terminal kinetic energy.
-- **Engagement Priority Tuning**: Allows the user to weight accuracy vs. lethality (energy) during the targeting solution search.
+- **Predictive Multi-Objective Intercept**: Optimizes trajectories for minimum miss distance, specific impact angles, and maximum kinetic energy.
+
+### 7. High-Fidelity Environmental Physics (V2)
+Next-generation planetary and atmospheric modeling:
+- **J2 Gravity Perturbation**: Accounts for Earth's oblateness (nodal regression and perigee shift), critical for long-range and sub-orbital flight.
+- **Expanded Atmospheric Model**: Proprietary implementation of the full 1976 US Standard Atmosphere up to 100km, including the Stratosphere and Mesosphere layers.
+- **Geopotential Correction**: Dynamically adjusts altitude calculations to account for varying gravitational strength with height.
 
 ## Installation
 
 ```bash
-# Install WBS V2 (compiles the C++ core extensions automatically)
+# Install WBS V2
 pip install -e .
 ```
 
 ## Python API Examples
 
-### V2 Strategic Targeting
+### V2 High-Fidelity Environment
 
 ```python
-from ballistics.targeting import TargetingSystem
-# ... setup solver ...
-ts = TargetingSystem(solver)
-res = ts.find_firing_solution(target_pos=[5000, 0, 100], v0=850, spin=1800,
-                             version=2, impact_angle_deg=30.0)
+from ballistics.environment import EarthModel, StandardAtmosphere
+# J2 gravity requires position vector relative to Earth center
+g_vec = EarthModel.gravity(altitude=0, version=2, pos_vec=[6378137, 0, 0])
+
+# Access stratosphere properties
+atm = StandardAtmosphere()
+props = atm.get_properties(altitude=30000, version=2)
+print(f"Stratosphere Density: {props['density']:.4f} kg/m^3")
 ```

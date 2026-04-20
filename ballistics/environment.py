@@ -39,7 +39,9 @@ class StandardAtmosphere:
         T_v = T_k / (1.0 - (P_vapor / P_pa) * (1.0 - 0.622))
         return T_v
 
-    def get_properties(self, altitude):
+    def get_properties(self, altitude, version=1):
+        if version == 2:
+            return AtmosphereV2.get_properties(altitude)
         """
         Returns temperature, pressure, density, and speed of sound at a given altitude.
         Altitude in meters relative to the baseline station.
@@ -76,6 +78,8 @@ class StandardAtmosphere:
             'speed_of_sound': speed_of_sound # [m/s]
         }
 
+from ballistics.environment_v2 import AtmosphereV2, EarthModelV2
+
 class EarthModel:
     """
     A model of the Earth's gravity and rotation effects (Coriolis).
@@ -86,7 +90,10 @@ class EarthModel:
     G0 = 9.80665        # Standard gravity at sea level [m/s^2]
 
     @classmethod
-    def gravity(cls, altitude):
+    def gravity(cls, altitude, version=1, pos_vec=None):
+        if version == 2 and pos_vec is not None:
+            # Note: pos_vec must be relative to Earth Center for J2
+            return np.linalg.norm(EarthModelV2.gravity_j2(pos_vec))
         """
         Calculates acceleration due to gravity varying with altitude.
         g = g0 * (R / (R + h))^2
