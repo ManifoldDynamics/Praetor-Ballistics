@@ -1,6 +1,7 @@
 import numpy as np
 import trimesh
 from ballistics.terminal import TerminalBallistics
+from ballistics.terminal_v2 import TerminalBallisticsV2
 from ballistics.eom import quaternion_to_rotation_matrix
 
 class LethalityResult:
@@ -36,7 +37,7 @@ class LethalityRayTracer:
         self.mesh.apply_translation(translation)
 
     def analyze_lethality(self, explosion_pos_m, projectile_vel_m_s, projectile_quat,
-                          fragment_mass_kg, fragment_diam_m, fragment_spray_vectors_body):
+                          fragment_mass_kg, fragment_diam_m, fragment_spray_vectors_body, version=1):
         """
         Ray traces fragments from the explosion position against the target mesh.
         Returns a LethalityResult.
@@ -94,11 +95,19 @@ class LethalityRayTracer:
                 # In a real model, we would decay the speed based on drag.
                 frag_speed = speeds[ray_idx]
 
-                # Apply De Marre formula to check penetration
-                # Assuming armor constant of 1.0 (RHA)
-                pen_mm = TerminalBallistics.demarre(frag_speed, fragment_mass_kg, fragment_diam_m, armor_constant=1.0)
+                # Apply Penetration Logic
+                if version == 2:
+                    # V2 logic: Thor and multi-layer simulation
+                    layers = [{'thickness_mm': self.target_armor_mm, 'material': 'RHA', 'type': 'rha'}]
+                    res_v2 = TerminalBallisticsV2.multi_layer_penetration(frag_speed, fragment_mass_kg, fragment_diam_m, layers)
+                    is_penetrated = res_v2['success']
+                    pen_mm = self.target_armor_mm if is_penetrated else 0.0 # simplified for result
+                else:
+                    # V1 logic: De Marre
+                    pen_mm = TerminalBallistics.demarre(frag_speed, fragment_mass_kg, fragment_diam_m, armor_constant=1.0)
+                    is_penetrated = pen_mm >= self.target_armor_mm
 
-                if pen_mm >= self.target_armor_mm:
+                if is_penetrated:
                     penetration_count += 1
                     penetrated_points.append(loc)
 
