@@ -18,8 +18,8 @@ Our new proprietary aero-predictor replaces Mach-based lookups with geometric ph
 
 ### 3. Terminal Ballistics & Lethality (V2)
 State-of-the-art lethality modeling:
-- **Multi-Layer Armor Penetration**: Simulates perforation through spaced armor and ERA.
-- **Mott Fragmentation Distribution**: Stochastic fragment mass sampling.
+- **Multi-Layer Armor Penetration**: Simulates perforation through spaced armor and ERA using the Thor empirical suite.
+- **Mott Fragmentation Distribution**: Stochastic fragment mass sampling based on casing material and explosive properties.
 
 ### 4. Active Propulsion & Guidance (V2)
 Advanced flight control for smart munitions:
@@ -28,7 +28,7 @@ Advanced flight control for smart munitions:
 
 ### 5. Advanced Aerothermodynamics (V2)
 High-fidelity thermal modeling:
-- **1D Radial Nodal Conduction**: Finite-difference conduction solver tracking temperature gradients through the skin.
+- **1D Radial Nodal Conduction**: Finite-difference conduction solver tracking temperature gradients across multiple discrete nodes through the projectile skin.
 
 ### 6. Strategic Targeting & Engagement (V2)
 Proprietary multi-objective intercept optimization:
@@ -36,9 +36,14 @@ Proprietary multi-objective intercept optimization:
 
 ### 7. High-Fidelity Environmental Physics (V2)
 Next-generation planetary and atmospheric modeling:
-- **J2 Gravity Perturbation**: Accounts for Earth's oblateness (nodal regression and perigee shift), critical for long-range and sub-orbital flight.
-- **Expanded Atmospheric Model**: Proprietary implementation of the full 1976 US Standard Atmosphere up to 100km, including the Stratosphere and Mesosphere layers.
-- **Geopotential Correction**: Dynamically adjusts altitude calculations to account for varying gravitational strength with height.
+- **J2 Gravity Perturbation**: Accounts for Earth's oblateness.
+- **Expanded Atmospheric Model**: Proprietary implementation of the full 1976 US Standard Atmosphere up to 100km.
+
+### 8. Advanced Stochastic Dispersion (V2)
+Next-generation Monte Carlo simulation for precision Munitions:
+- **Gaussian Copula Sampling**: Proprietary implementation for correlated input variance (e.g., modeling the realistic coupling between muzzle velocity and propellant mass).
+- **von Karman Gust Modeling**: Replaces constant wind noise with stochastic non-white turbulence profiles for realistic flight instability.
+- **Bayesian Impact Probability (BIP)**: A high-precision engine for estimating Circular Error Probable (CEP) and Mean Point of Impact (MPI) with Bayesian uncertainty quantification.
 
 ## Installation
 
@@ -49,15 +54,14 @@ pip install -e .
 
 ## Python API Examples
 
-### V2 High-Fidelity Environment
+### V2 Monte Carlo Simulation
 
 ```python
-from ballistics.environment import EarthModel, StandardAtmosphere
-# J2 gravity requires position vector relative to Earth center
-g_vec = EarthModel.gravity(altitude=0, version=2, pos_vec=[6378137, 0, 0])
-
-# Access stratosphere properties
-atm = StandardAtmosphere()
-props = atm.get_properties(altitude=30000, version=2)
-print(f"Stratosphere Density: {props['density']:.4f} kg/m^3")
+from ballistics.monte_carlo import MonteCarloSimulator
+# ... setup simulator ...
+sim = MonteCarloSimulator(base_solver)
+res = sim.run(num_shots=1000, target_plane='vertical', target_distance=2000,
+             base_v0=850, base_pitch_rad=0.5, base_yaw_rad=0, base_spin_rads=1800,
+             sd_v0_ms=2.0, sd_mass_kg=0.01, version=2)
+print(f"Bayesian CEP 50: {res.cep_50:.2f} meters")
 ```

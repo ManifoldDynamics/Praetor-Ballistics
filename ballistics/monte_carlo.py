@@ -5,6 +5,7 @@ from copy import deepcopy
 from ballistics.environment import WindProfile
 from ballistics.projectile import Projectile
 from ballistics.solver import Solver6DoF
+from ballistics.stochastic_v2 import StochasticEngineV2
 
 class MonteCarloResult:
     def __init__(self, target_plane, impacts, mpi, cep_50, message):
@@ -112,27 +113,43 @@ class MonteCarloSimulator:
     def run(self, num_shots, target_plane, target_distance,
             base_v0, base_pitch_rad, base_yaw_rad, base_spin_rads,
             sd_v0_ms=0.0, sd_mass_kg=0.0, sd_wind_speed_ms=0.0,
-            sd_pitch_rad=0.0, sd_yaw_rad=0.0, max_workers=None):
+            sd_pitch_rad=0.0, sd_yaw_rad=0.0, max_workers=None, version=1):
         """
         Runs the Monte Carlo simulation.
         target_plane: 'vertical' or 'horizontal'
         target_distance: Distance X in meters (only used if vertical plane)
         """
 
-        # 1. Generate normal distributions for random variables
-        np.random.seed(42) # For reproducibility in testing, though usually you'd want random
-
+        # 1. Generate random states
+        np.random.seed(42)
         random_states = []
-        for _ in range(num_shots):
-            state = {
-                'v0': np.random.normal(base_v0, sd_v0_ms),
-                'mass': max(0.001, np.random.normal(self.base_solver.projectile.mass, sd_mass_kg)),
-                'wind_speed': max(0.0, np.random.normal(0.0, sd_wind_speed_ms)), # Base wind is handled simply here
-                'pitch': np.random.normal(base_pitch_rad, sd_pitch_rad),
-                'yaw': np.random.normal(base_yaw_rad, sd_yaw_rad),
-                'spin': base_spin_rads # Not randomized for MVP
-            }
-            random_states.append(state)
+
+        if version == 2:
+            # Use V2 Correlated Sampling
+            means = [base_v0, self.base_solver.projectile.mass, base_pitch_rad, base_yaw_rad]
+            sds = [sd_v0_ms, sd_mass_kg, sd_pitch_rad, sd_yaw_rad]
+            # Assuming a standard correlation matrix (e.g. higher mass -> lower v0)
+            corr = np.eye(4)
+            corr[0, 1] = corr[1, 0] = -0.3 # 30% negative correlation
+
+            samples = StochasticEngineV2.sample_correlated_inputs(means, sds, corr, num_shots)
+            for s in samples:
+                random_states.append({
+                    'v0': s[0], 'mass': max(0.001, s[1]), 'pitch': s[2], 'yaw': s[3],
+                    'wind_speed': max(0.0, np.random.normal(0.0, sd_wind_speed_ms)),
+                    'spin': base_spin_rads
+                })
+        else:
+            for _ in range(num_shots):
+                state = {
+                    'v0': np.random.normal(base_v0, sd_v0_ms),
+                    'mass': max(0.001, np.random.normal(self.base_solver.projectile.mass, sd_mass_kg)),
+                    'wind_speed': max(0.0, np.random.normal(0.0, sd_wind_speed_ms)),
+                    'pitch': np.random.normal(base_pitch_rad, sd_pitch_rad),
+                    'yaw': np.random.normal(base_yaw_rad, sd_yaw_rad),
+                    'spin': base_spin_rads
+                }
+                random_states.append(state)
 
         # 2. Run Simulations in Parallel
         impacts = []
@@ -170,10 +187,12 @@ class MonteCarloSimulator:
         mpi = [mpi_u, mpi_v]
 
         # Circular Error Probable (CEP)
-        # Calculate distance of each impact from the MPI
-        distances = np.sqrt((impacts[:, 0] - mpi_u)**2 + (impacts[:, 1] - mpi_v)**2)
-        # CEP50 is the median distance
-        cep_50 = np.median(distances)
+        if version == 2:
+            # Use V2 Bayesian Engine
+            cep_50 = StochasticEngineV2.calculate_bayesian_cep(impacts, mpi)
+        else:
+            distances = np.sqrt((impacts[:, 0] - mpi_u)**2 + (impacts[:, 1] - mpi_v)**2)
+            cep_50 = np.median(distances)
 
         msg = f"Successfully simulated {len(impacts)}/{num_shots} shots."
 
