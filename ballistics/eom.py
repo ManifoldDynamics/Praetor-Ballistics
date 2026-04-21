@@ -88,7 +88,7 @@ def quaternion_to_euler(q):
 from ballistics.aerothermodynamics import HypersonicHeating
 from ballistics.aerothermodynamics_v2 import AerothermodynamicsV2
 
-def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None, seeker=None):
+def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None, seeker=None, flexible_model=None):
     """
     propulsion: None, or a dict containing:
       - 'thrust_n': Thrust in Newtons
@@ -104,6 +104,8 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
 
     # V2: Track multiple temperatures if state vector is large enough
     num_thermal_nodes = 5
+    num_flexible_modes = 2
+
     if len(state) >= 13 + num_thermal_nodes:
         t_nodes = state[13:13+num_thermal_nodes]
         T_surface = t_nodes[0]
@@ -187,7 +189,7 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     # (e.g., Cd reduces while motor is burning due to base bleed effect)
 
     # Drag is primarily axial
-    C_X = -aero.cd(mach)
+    C_X = -aero.cd(mach) # Will be overridden if flexible
 
     # Normal force coefficients (Linear approx: C_N = C_N_alpha * alpha)
     # Lift acts perpendicular to the body axis relative to the air velocity vector
@@ -312,6 +314,23 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     ])
     q_dot_vec = q_dot_mat @ omega
 
+    # Flexible Body / Modal Dynamics
+    flexible_derivatives = []
+    if flexible_model is not None:
+        thermal_offset = num_thermal_nodes if len(state) >= 13 + num_thermal_nodes else (1 if (len(state) > 13 and len(state) < 13 + num_thermal_nodes) else 0)
+        modal_idx = 13 + thermal_offset
+        if len(state) >= modal_idx + 2 * num_flexible_modes:
+            eta = state[modal_idx : modal_idx + num_flexible_modes]
+            eta_dot = state[modal_idx + num_flexible_modes : modal_idx + 2 * num_flexible_modes]
+            corrections = flexible_model.get_aeroelastic_corrections(eta, mach)
+            # Re-calculate C_X and C_m with corrections
+            C_X = -(aero.cd(mach) + corrections['cd'])
+            C_m = (aero.cma(mach) + corrections['cma']) * alpha_approx + pitch_damping
+            C_n = -(aero.cma(mach) + corrections['cma']) * beta_approx + yaw_damping
+
+            eta_ddot = flexible_model.calculate_modal_derivatives(t, eta, eta_dot, q_dyn, mach, alpha_approx)
+            flexible_derivatives = list(eta_dot) + list(eta_ddot)
+
     # Aerothermodynamics
     thermal_derivatives = []
     if len(state) > 13 and hasattr(projectile, 'material') and hasattr(projectile, 'nose_radius_m'):
@@ -340,6 +359,10 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
 
     if len(thermal_derivatives) > 0:
         state_dot[13:13+len(thermal_derivatives)] = thermal_derivatives
+
+    if len(flexible_derivatives) > 0:
+        idx = 13 + len(thermal_derivatives)
+        state_dot[idx:idx+len(flexible_derivatives)] = flexible_derivatives
 
     return state_dot
 

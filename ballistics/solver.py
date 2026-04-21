@@ -3,7 +3,7 @@ from scipy.integrate import solve_ivp
 from ballistics.eom import get_eom
 
 class Solver6DoF:
-    def __init__(self, projectile, aero, environment_atm, environment_earth, environment_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None, seeker=None):
+    def __init__(self, projectile, aero, environment_atm, environment_earth, environment_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None, seeker=None, flexible=False):
         self.projectile = projectile
         self.aero = aero
         self.env_atm = environment_atm
@@ -14,6 +14,7 @@ class Solver6DoF:
         self.guidance = guidance
         self.target_state = target_state
         self.seeker = seeker
+        self.flexible = flexible
 
     def solve(self, t_span, initial_position, initial_velocity, initial_pitch, initial_yaw, spin_rate, max_step=0.01, custom_events=None):
         if np.isscalar(initial_velocity):
@@ -47,7 +48,9 @@ class Solver6DoF:
 
         # Include 14th state for temperature if material is provided
         use_thermo = hasattr(self.projectile, 'material') and self.projectile.material is not None
-        num_states = 14 if use_thermo else 13
+        num_thermal = 5 if use_thermo else 0 # V2 default
+        num_flex = 4 if self.flexible else 0 # 2 modes * (eta, eta_dot)
+        num_states = 13 + num_thermal + num_flex
 
         y0 = np.zeros(num_states)
         y0[0:3] = initial_position
@@ -56,7 +59,13 @@ class Solver6DoF:
         y0[10:13] = omega0
 
         if use_thermo:
-            y0[13] = 300.0 # Start at ~27C (300K)
+            y0[13:13+num_thermal] = 300.0 # Start at ~27C (300K)
+
+        if self.flexible:
+            from ballistics.flexible_v2 import FlexibleBeamModelV2
+            self._flex_model = FlexibleBeamModelV2(self.projectile)
+        else:
+            self._flex_model = None
 
         def hit_ground(t, y, *args):
             return y[2] # Z position
@@ -182,7 +191,7 @@ class Solver6DoF:
                     tgt_vx, tgt_vy, tgt_vz
                 )
             else:
-                return get_eom(t, y, self.projectile, self.aero, self.env_atm, self.env_earth, self.latitude_rad, self.env_wind, self.propulsion, self.guidance, self.target_state, self.seeker)
+                return get_eom(t, y, self.projectile, self.aero, self.env_atm, self.env_earth, self.env_wind, self.latitude_rad, self.propulsion, self.guidance, self.target_state, self.seeker, self._flex_model)
 
         sol = solve_ivp(
             eom_wrapper,

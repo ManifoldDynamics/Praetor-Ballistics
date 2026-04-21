@@ -40,9 +40,15 @@ Proprietary engine for modeling the simultaneous 6-DoF motion of multiple separa
 
 ### 11. High-Fidelity Seeker & Sensor Simulation (V2)
 Advanced modeling of projectile-mounted sensors for guided munitions:
-- **Seeker Dynamics**: Implements sampling rates, processing latencies, and SNR-dependent stochastic noise (angular jitter and range bias).
-- **IR Signature Modeling**: Calculates target radiant intensity based on thermal characteristics and projected area.
-- **Signal-to-Noise (SNR) Logic**: Dynamically adjusts sensing accuracy and track stability based on target distance and detector sensitivity.
+- **Seeker Dynamics**: Implements sampling rates, processing latencies, and SNR-dependent stochastic noise.
+- **IR Signature Modeling**: Calculates target radiant intensity based on thermal characteristics.
+- **Signal-to-Noise (SNR) Logic**: Dynamically adjusts sensing accuracy and track stability.
+
+### 12. Flexible-Body & Aeroelasticity (V2)
+Proprietary engine for modeling non-rigid projectiles and coupled aero-structural effects:
+- **Modal Dynamics Solver**: Uses a modal representation (eigenvalues/eigenvectors) to track body deformation during flight.
+- **Aeroelastic Coupling**: Dynamically corrects aerodynamic coefficients (Cd, Cma) based on real-time structural flexing.
+- **Structural Integrity Monitoring**: Analyzes modal coordinates to ensure stability and detect conditions leading to flutter.
 
 ## Installation
 
