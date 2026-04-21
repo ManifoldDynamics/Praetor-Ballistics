@@ -31,26 +31,17 @@ J2 Gravity Perturbation and an expanded 100km atmospheric model.
 Gaussian Copula sampling and von Karman turbulence modeling for high-fidelity Monte Carlo simulations.
 
 ### 9. Proprietary High-Order CFD (V2)
-A state-of-the-art C++ Computational Fluid Dynamics core:
-- **5th-Order WENO Reconstruction**: Captures complex supersonic shockwave interactions and contact discontinuities with extreme precision and minimal numerical dissipation.
-- **HLLC Riemann Solver**: Improved resolution of shock fronts and contact surfaces compared to standard Rusanov/Lax-Friedrichs schemes.
-- **3rd-Order TVD Runge-Kutta**: High-order temporal integration for stable, accurate time-accurate flow simulations.
+State-of-the-art C++ CFD core with 5th-Order WENO reconstruction and HLLC Riemann solver.
+
+### 10. Multi-Body Separation Physics (V2)
+Proprietary engine for modeling the simultaneous 6-DoF motion of multiple separating bodies:
+- **Interference Aerodynamics**: Accounts for proximity-based drag variations and wake effects between bodies (e.g., discarding sabots or MIRVs).
+- **Coupled Multibody Integration**: Simultaneous integration of $N$ rigid bodies with inter-body force coupling.
+- **Separation Impulse Modeling**: Models the mechanical forces exerted during the deployment of sub-munitions or payload fairings.
 
 ## Installation
 
 ```bash
-# Install WBS V2 (compiles C++ cores automatically)
+# Install WBS V2
 pip install -e .
-```
-
-## Python API Examples
-
-### V2 High-Order CFD
-
-```python
-from ballistics.cfd_v2 import CFDPipelineV2
-pipeline = CFDPipelineV2("projectile_cad.stl")
-# Execute high-order WENO solver
-results = pipeline.run_simulation_v2(mach=3.5, altitude_m=15000, env_atm=atm)
-print(f"High-Order Cd: {results['cd']:.4f}")
 ```

@@ -76,11 +76,6 @@ class Solver6DoF:
         except ImportError:
             use_cpp = False
 
-        # Temporarily disable C++ core for testing Guidance since the C++ module needs to be recompiled
-        # with the latest guidance logic changes to match Python precisely, but we are running in an environment
-        # where we might not want to re-run `pip install -e .` on every minor tweak.
-        use_cpp = False
-
         # Pre-extract Aerodynamics tables for C++
         if use_cpp:
             # C++ expects mach_array and corresponding coeff_arrays

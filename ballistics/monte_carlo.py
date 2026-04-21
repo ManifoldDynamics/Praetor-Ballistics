@@ -29,15 +29,6 @@ def _run_single_shot(base_solver, p_state, target_plane, target_distance):
     Worker function to run a single trajectory with randomized parameters.
     Must be a module-level function to work cleanly with multiprocessing.
     """
-    import numpy as np
-    from copy import deepcopy
-    from ballistics.environment import WindProfile
-    from ballistics.projectile import Projectile
-    from ballistics.solver import Solver6DoF
-    """
-    Worker function to run a single trajectory with randomized parameters.
-    Must be a module-level function to work cleanly with multiprocessing.
-    """
     # 1. Rebuild the solver with the new randomized parameters
     proj = Projectile(
         mass=p_state['mass'],

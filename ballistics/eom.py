@@ -324,3 +324,42 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
         state_dot[13:13+len(thermal_derivatives)] = thermal_derivatives
 
     return state_dot
+
+def get_multibody_eom(t, full_state, bodies, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0):
+    """
+    Computes derivatives for N dynamic bodies simultaneously, accounting for interference.
+    full_state: [body1_state, body2_state, ...] each 13+ elements.
+    bodies: list of Projectile objects.
+    """
+    n_bodies = len(bodies)
+    # Assume 13 states per body for simplicity in multibody
+    state_size = 13
+    state_dot = np.zeros(len(full_state))
+
+    from ballistics.separation_v2 import MultiBodyManagerV2
+
+    for i in range(n_bodies):
+        idx = i * state_size
+        y_i = full_state[idx : idx + state_size]
+
+        # Calculate base derivatives
+        dot_i = get_eom(t, y_i, bodies[i], aero[i], env_atmosphere, env_earth, env_wind, latitude_rad)
+
+        # Add interference from other bodies
+        for j in range(n_bodies):
+            if i == j: continue
+            idx_j = j * state_size
+            y_j = full_state[idx_j : idx_j + state_size]
+
+            dist_vec = y_j[0:3] - y_i[0:3]
+            v_rel = y_j[3:6] - y_i[3:6]
+
+            # Simple Interference Force integration
+            int_factor = MultiBodyManagerV2.calculate_interference_drag(dist_vec, v_rel, 0)
+            # Apply interference to acceleration (state indices 3:6)
+            # This is a highly simplified coupling for the V2 MVP
+            dot_i[3:6] *= int_factor
+
+        state_dot[idx : idx + state_size] = dot_i
+
+    return state_dot
