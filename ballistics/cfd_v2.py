@@ -31,7 +31,8 @@ class CFDPipelineV2:
 
         try:
             import wbs_cfd_v2
-            cpp_res = wbs_cfd_v2.solve_cfd_v2(tunnel, dx, dy, dz, mach, p_inf, rho_inf, int(grid_res*2))
+            # V2.x: Pass voxel tunnel and physical parameters to the high-order C++ core
+            cpp_res = wbs_cfd_v2.solve_cfd_v2(tunnel, dx, dy, dz, float(mach), float(p_inf), float(rho_inf), int(grid_res))
         except ImportError:
             # Mock for environment without compilation
             cpp_res = {'cd': 0.25, 'cl': 0.05}

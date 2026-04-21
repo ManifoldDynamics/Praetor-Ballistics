@@ -30,8 +30,8 @@ Includes J2 Gravity Perturbation, an expanded 100km atmospheric model, and the *
 ### 8. Advanced Stochastic Dispersion (V2.x)
 Gaussian Copula sampling, von Karman turbulence, and **Importance Sampling** for high-fidelity rare-event (tail risk) strategic simulations.
 
-### 9. Proprietary High-Order CFD (V2)
-State-of-the-art C++ CFD core with 5th-Order WENO reconstruction and HLLC Riemann solver.
+### 9. Proprietary High-Order CFD (V2.x)
+High-fidelity 3D Finite Volume Solver featuring **5th-Order WENO** spatial reconstruction and the **HLLC Riemann Solver** for rigorous supersonic shock-capture and pressure-integration.
 
 ### 10. Multi-Body Separation Physics (V2)
 Proprietary engine for modeling the simultaneous 6-DoF motion of multiple separating bodies:
