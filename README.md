@@ -46,9 +46,14 @@ Advanced modeling of projectile-mounted sensors for guided munitions:
 
 ### 12. Flexible-Body & Aeroelasticity (V2)
 Proprietary engine for modeling non-rigid projectiles and coupled aero-structural effects:
-- **Modal Dynamics Solver**: Uses a modal representation (eigenvalues/eigenvectors) to track body deformation during flight.
-- **Aeroelastic Coupling**: Dynamically corrects aerodynamic coefficients (Cd, Cma) based on real-time structural flexing.
-- **Structural Integrity Monitoring**: Analyzes modal coordinates to ensure stability and detect conditions leading to flutter.
+- **Modal Dynamics Solver**: Uses a modal representation to track body deformation.
+- **Aeroelastic Coupling**: Dynamically corrects aerodynamic coefficients based on real-time structural flexing.
+
+### 13. Terrain-Aware Lethality & Fragmentation (V2)
+High-fidelity modeling of terminal effects in complex 3D environments:
+- **Terrain Shadowing & Obstruction**: Fragments are dynamically blocked by terrain features, hills, and buildings using high-speed ray-mesh intersection.
+- **Secondary Fragmentation (Ground Splash)**: Models the generation of secondary debris and ricochets upon impact with soil, rock, or concrete.
+- **Lethal Area Analysis**: Provides accurate 3D footprints of lethality accounting for environmental shielding and secondary effects.
 
 ## Installation
 

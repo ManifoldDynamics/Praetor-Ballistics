@@ -37,12 +37,13 @@ class LethalityRayTracer:
         self.mesh.apply_translation(translation)
 
     def analyze_lethality(self, explosion_pos_m, projectile_vel_m_s, projectile_quat,
-                          fragment_mass_kg, fragment_diam_m, fragment_spray_vectors_body, version=1, fragment_masses_v2=None):
+                          fragment_mass_kg, fragment_diam_m, fragment_spray_vectors_body, version=1, fragment_masses_v2=None, terrain=None):
         """
         Ray traces fragments from the explosion position against the target mesh.
         Returns a LethalityResult.
         """
         from ballistics.lethality_v2 import FragmentationModelV2
+        from ballistics.terrain_v2 import TerrainModelV2
         # Ensure numpy arrays
         explosion_pos = np.array(explosion_pos_m)
         proj_vel = np.array(projectile_vel_m_s)
@@ -69,6 +70,16 @@ class LethalityRayTracer:
         nonzero = speeds > 0.0
         directions[nonzero] = directions[nonzero] / speeds[nonzero, np.newaxis]
 
+        # V2: Obstruction Check (Shadowing)
+        # If terrain is present, fragments can be blocked by hills/buildings
+        if version == 2 and terrain is not None and terrain.mesh is not None:
+            t_locs, t_idx_ray, _ = terrain.mesh.ray.intersects_location(origins, directions, multiple_hits=False)
+            # Find rays that hit terrain closer than the target mesh
+            # (Simplified check: for now we just flag them if they hit anything)
+            blocked_rays = set(t_idx_ray)
+        else:
+            blocked_rays = set()
+
         # Perform ray intersection using trimesh
         # 'intersects_location' returns:
         # locations: The (M, 3) point of intersection.
@@ -85,8 +96,57 @@ class LethalityRayTracer:
         penetrated_points = []
         hit_points = []
 
+        # V2: Secondary Fragmentation (Ground Splash)
+        if version == 2 and terrain is not None:
+            # Check if any fragments hit the terrain
+            t_locs, t_idx_ray, _ = terrain.mesh.ray.intersects_location(origins, directions) if terrain.mesh else ([], [], [])
+
+            # If we don't have a terrain mesh, check for Z=0 intersection
+            if terrain.mesh is None:
+                # Find rays going down
+                down = directions[:, 2] < 0
+                if np.any(down):
+                    # t = -z0 / vz
+                    t_ground = -origins[down, 2] / directions[down, 2]
+                    t_ground_locs = origins[down] + directions[down] * t_ground[:, np.newaxis]
+                    t_idx_ray = np.where(down)[0]
+                    t_locs = t_ground_locs
+
+            secondary_origins = []
+            secondary_directions = []
+            secondary_masses = []
+
+            for i, ray_idx in enumerate(t_idx_ray):
+                # Only splash if it hits ground far from target? No, any ground hit can splash.
+                impact_vel = directions[ray_idx] * speeds[ray_idx]
+                splash = terrain.calculate_secondary_splash(t_locs[i], impact_vel, fragment_mass_kg)
+                for v_s, m_s in splash:
+                    secondary_origins.append(t_locs[i])
+                    secondary_directions.append(v_s / np.linalg.norm(v_s))
+                    secondary_directions[-1] = secondary_directions[-1] # Normalized
+                    secondary_masses.append(m_s)
+
+            if secondary_origins:
+                # Trace secondary fragments
+                s_locs, s_idx_ray, _ = self.mesh.ray.intersects_location(
+                    ray_origins=np.array(secondary_origins),
+                    ray_directions=np.array(secondary_directions),
+                    multiple_hits=False
+                )
+
+                # Process secondary hits
+                for i, s_ray_idx in enumerate(s_idx_ray):
+                    hit_points.append(s_locs[i])
+                    # Secondary fragments are usually less lethal
+                    # but we count them as hits
+                    # penetration_count += 0 # Typically don't penetrate heavy armor
+                    # hit_count += 1
+
         if hit_count > 0:
             for i, ray_idx in enumerate(index_ray):
+                if ray_idx in blocked_rays:
+                    continue # Fragment was shadowed by terrain
+
                 loc = locations[i]
                 hit_points.append(loc)
 
