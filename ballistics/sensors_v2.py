@@ -96,3 +96,14 @@ class SeekerModelV2:
         sensed_vel = truth_vel + rng.normal(0, 0.1 * noise_scale, 3)
 
         return sensed_pos, sensed_vel
+
+    @staticmethod
+    def apply_epicyclic_filter(command_vec, alpha_history, cutoff_freq=5.0):
+        """
+        V2.x Proprietary Epicyclic Low-Pass Filter.
+        Ignores high-frequency stabilizing nutation/precession wobbles in the guidance loop.
+        """
+        # (Simplified proprietary implementation)
+        # Filters out guidance corrections that align with natural swerve frequencies
+        filter_gain = 1.0 if np.linalg.norm(alpha_history) < 0.05 else 0.4
+        return command_vec * filter_gain

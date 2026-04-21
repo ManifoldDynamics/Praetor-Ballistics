@@ -59,3 +59,24 @@ class StochasticEngineV2:
         # CEP 50% = sigma * sqrt(2 * ln(2)) ~ 1.177 * sigma
         cep_50 = sigma_rayleigh * np.sqrt(2 * np.log(2))
         return cep_50
+
+    @staticmethod
+    def importance_sampling_weights(samples, nominal_means, std_devs, bias_factor=1.5):
+        """
+        V2.x Proprietary Importance Sampling logic.
+        Assigns weights to samples to prioritize rare event analysis (tail risks).
+        """
+        # Calculate likelihood ratio: f(x) / g(x)
+        # f(x) is original distribution, g(x) is biased (wider) distribution
+        weights = []
+        for s in samples:
+            # Simplified likelihood ratio for multivariate normal
+            # If g(x) has std_dev * bias_factor
+            dist_sq = np.sum(((s - nominal_means) / std_devs)**2)
+
+            # W = (std_biased / std_orig) * exp(-0.5 * [ (x/std_o)^2 - (x/std_b)^2 ])
+            # (Simplified proprietary weight calculation)
+            w = (bias_factor) * np.exp(-0.5 * dist_sq * (1.0 - (1.0/bias_factor)**2))
+            weights.append(w)
+
+        return np.array(weights)

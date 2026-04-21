@@ -43,15 +43,23 @@ class FragmentationModelV2:
         return masses
 
     @staticmethod
-    def get_fragment_properties(mass):
+    def get_fragment_properties(mass, shape_factor=None):
         """
         Calculates geometric properties for a non-spherical fragment.
+        V2.x stochastic shape factor modeling.
         """
         density_steel = 7850.0
         volume = mass / density_steel
         # Characteristic dimension (equivalent cube)
         s = volume**(1.0/3.0)
-        # Average projected area (random orientation factor ~ 1.5)
-        area = 1.5 * s**2
+
+        # Stochastic shape factor (S): ratio of average projected area to s^2
+        # For sphere, S=0.785. For cube, S=1.5. For shards, S > 2.0.
+        if shape_factor is None:
+            # Proprietary stochastic distribution for jagged fragments
+            shape_factor = np.random.normal(1.8, 0.3)
+            shape_factor = np.clip(shape_factor, 1.2, 3.0)
+
+        area = shape_factor * s**2
         diameter = 2 * np.sqrt(area / np.pi)
         return area, diameter

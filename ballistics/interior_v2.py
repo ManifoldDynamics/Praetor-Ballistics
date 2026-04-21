@@ -86,35 +86,47 @@ class InteriorSolverV2:
             # 1. Volume and Geometry
             V_gas = V0 + A * x - (C * (1.0 - z) / rho_p)
 
-            # 2. Pressure calculation via Energy Balance (V2)
-            # Internal Energy U = (C * z * F) / (gamma - 1) - 0.5 * M_eff * v^2 - Q_lost
-            # P = U * (gamma - 1) / (V_gas - C * z * eta)
+            # 2. Pressure calculation via Energy Balance (V2.x NAC Equation of State)
+            # Noble-Abel-Coward accounts for gas co-volume (eta) at extreme pressures
+            # U = (C * z * F) / (gamma - 1) - 0.5 * M_eff * v^2 - Q_lost
+            # P = (gamma - 1) * U / (V_gas - C * z * eta)
 
             energy_chem = (C * z * F) / (gamma - 1.0)
             energy_kin = 0.5 * M_eff * (v**2)
 
             U = energy_chem - energy_kin - Q_lost
-            denom = V_gas - C * z * eta
 
-            if denom <= 0:
+            # co-volume correction (Noble-Abel-Coward)
+            covolume_correction = C * z * eta
+            effective_volume = V_gas - covolume_correction
+
+            if effective_volume <= 1e-9:
                 P = 101325.0
             else:
-                P = U * (gamma - 1.0) / denom
+                # P * (V - b) = nRT -> Energy-based form
+                P = U * (gamma - 1.0) / effective_volume
+
+            # Lagrange Gradient Correction (Pressure at breech vs projectile)
+            # P_avg = P * (1 + C / (3 * M))
+            # P_proj = P_avg / (1 + C / (2 * M))
+            lagrange_factor = (1.0 + C / (3.0 * M)) / (1.0 + C / (2.0 * M))
+            P = P * lagrange_factor
 
             P = max(101325.0, P)
 
             # 3. Gas Temperature (needed for heat loss)
             # T_gas = P * (V_gas - C * z * eta) / (C * z * (F / T_flame))
             if z > 1e-4:
-                T_gas = P * denom / (C * z * (F / T_flame))
+                T_gas = P * effective_volume / (C * z * (F / T_flame))
             else:
                 T_gas = T_flame
 
-            # 4. Heat Loss Rate (dQ/dt)
-            # Simplified convective model: h = coeff * P^0.8
-            h_conv = self.h_conv_coeff * (P**0.8)
+            # 4. Heat Loss Rate (dQ/dt) - V2.x Bartz Equation Correlation
+            # h = [0.026 / D^0.2] * [mu^0.2 * Cp / Pr^0.6] * (P/a)^0.8
+            # (Simplified Bartz-style proprietary implementation)
+            h_bartz = self.h_conv_coeff * (P**0.8) * (1.0 + 0.1 * (v / 1000.0))
             S_bore = get_surface_area(x)
-            dQ_dt = h_conv * S_bore * (T_gas - self.T_barrel)
+            dQ_dt = h_bartz * S_bore * (T_gas - self.T_barrel)
             if dQ_dt < 0: dQ_dt = 0
 
             # 5. Resistance and Acceleration

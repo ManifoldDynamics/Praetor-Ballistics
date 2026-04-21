@@ -108,6 +108,7 @@ class Solver6DoF:
             self._cpp_cmaqs = _get_array(self.aero._cmaq_func)
             self._cpp_cnlps = _get_array(self.aero._cnlp_func)
             self._cpp_cmags = _get_array(self.aero._cmag_func)
+            self._cpp_clps = np.array([self.aero.clp(m) for m in aero_machs])
 
         def eom_wrapper(t, y):
             if use_cpp:
@@ -182,7 +183,7 @@ class Solver6DoF:
                     T0, P0, L, R, G_atm, RH,
                     G0, R_EARTH, OMEGA, self.latitude_rad,
                     self._cpp_machs, self._cpp_cds, self._cpp_cls,
-                    self._cpp_cmas, self._cpp_cmaqs, self._cpp_cnlps, self._cpp_cmags,
+                    self._cpp_cmas, self._cpp_cmaqs, self._cpp_cnlps, self._cpp_cmags, self._cpp_clps,
                     wind_vx, wind_vy, wind_vz,
                     p_act, p_t, p_b, p_m,
                     h_act, mat_density, mat_cp, mat_eps, nose_rad,

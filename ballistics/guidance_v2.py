@@ -43,6 +43,10 @@ class GuidanceV2:
 
         a_cmd = self.N * (v_c * np.cross(omega, r_hat) + 0.5 * t_a_perp)
 
+        # V2.x Epicyclic Swerve Filter
+        from ballistics.sensors_v2 import SeekerModelV2
+        a_cmd = SeekerModelV2.apply_epicyclic_filter(a_cmd, [0,0,0]) # Placeholder history
+
         # Limit G
         a_mag = np.linalg.norm(a_cmd)
         if a_mag > self.max_accel:

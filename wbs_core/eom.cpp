@@ -93,7 +93,7 @@ py::array_t<double> get_eom_cpp(
     double atm_T0, double atm_P0, double atm_L, double atm_R, double atm_G, double atm_RH,
     double earth_G0, double earth_R_EARTH, double earth_OMEGA, double latitude_rad,
 
-    // Aero arrays (mach, cd, cl, cma, cmaq, cnlp, cmag)
+    // Aero arrays (mach, cd, cl, cma, cmaq, cnlp, cmag, clp)
     py::array_t<double> aero_mach_arr,
     py::array_t<double> aero_cd_arr,
     py::array_t<double> aero_cl_arr,
@@ -101,6 +101,7 @@ py::array_t<double> get_eom_cpp(
     py::array_t<double> aero_cmaq_arr,
     py::array_t<double> aero_cnlp_arr,
     py::array_t<double> aero_cmag_arr,
+    py::array_t<double> aero_clp_arr,
 
     // Wind vector (assuming constant for C++ speedup, or evaluating it. We'll pass a constant wind vector for now)
     double wind_vx, double wind_vy, double wind_vz,
@@ -196,9 +197,10 @@ py::array_t<double> get_eom_cpp(
     auto cmaqs = aero_cmaq_arr.unchecked<1>();
     auto cnlps = aero_cnlp_arr.unchecked<1>();
     auto cmags = aero_cmag_arr.unchecked<1>();
+    auto clps = aero_clp_arr.unchecked<1>();
 
     int n_pts = machs.shape(0);
-    double cd=cds(0), cl=cls(0), cma=cmas(0), cmaq=cmaqs(0), cnlp=cnlps(0), cmag=cmags(0);
+    double cd=cds(0), cl=cls(0), cma=cmas(0), cmaq=cmaqs(0), cnlp=cnlps(0), cmag=cmags(0), clp=clps(0);
 
     if (n_pts > 1) {
         // Find interval
@@ -223,6 +225,7 @@ py::array_t<double> get_eom_cpp(
         cmaq = cmaqs(idx) + f * (cmaqs(idx+1) - cmaqs(idx));
         cnlp = cnlps(idx) + f * (cnlps(idx+1) - cnlps(idx));
         cmag = cmags(idx) + f * (cmags(idx+1) - cmags(idx));
+        clp = clps(idx) + f * (clps(idx+1) - clps(idx));
     }
 
     // 5. Active Propulsion
@@ -256,7 +259,9 @@ py::array_t<double> get_eom_cpp(
     double C_n = -cma * beta_approx + yaw_damping;
 
     double p_hat = (v_air_mag > 1e-6) ? (omega[0] * d / (2.0 * v_air_mag)) : 0.0;
-    double C_l = -0.01 * p_hat; // simple roll damping
+
+    // V2.x Synchronized Roll Damping (Clp)
+    double C_l = clp * p_hat;
 
     double C_m_mag = cmag * p_hat * beta_approx;
     double C_n_mag = -cmag * p_hat * alpha_approx;

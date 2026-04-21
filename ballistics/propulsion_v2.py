@@ -23,15 +23,23 @@ class RocketMotorV2:
         """
         Calculates instantaneous thrust and mass flow rate.
         F = F_sl + (P_sl - P_a) * A_e
+        Includes V2.x Nozzle Erosion effects (ISP degradation).
         """
         t_accum = 0.0
         for stage in self.stages:
-            if t < t_accum + stage['burn_time_s']:
+            dt = t - t_accum
+            if dt < stage['burn_time_s'] and dt >= 0:
                 # Current stage active
                 f_sl = stage['thrust_sl_n']
                 a_e = stage['exit_area_m2']
+
+                # V2.x Nozzle Erosion: throat area increases, reducing ISP
+                # (Simplified proprietary erosion rate: 0.1% area increase per second)
+                erosion_factor = 1.0 + 0.001 * dt
+                thrust_loss = 0.002 * dt * f_sl # Propellant ISP loss
+
                 # P_sl = 101325 Pa
-                thrust = f_sl + (101325.0 - p_ambient) * a_e
+                thrust = (f_sl - thrust_loss) + (101325.0 - p_ambient) * (a_e * erosion_factor)
                 mdot = stage['propellant_mass_kg'] / stage['burn_time_s']
                 return max(0.0, thrust), mdot
             t_accum += stage['burn_time_s']

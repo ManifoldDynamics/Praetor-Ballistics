@@ -212,7 +212,8 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     C_m = aero.cma(mach) * alpha_approx + pitch_damping
     C_n = -aero.cma(mach) * beta_approx + yaw_damping # Assuming symmetry
 
-    C_l = -0.01 * (omega[0] * d / (2 * v_air_mag)) if v_air_mag > 0 else 0
+    # V2.x Roll Damping (Clp)
+    C_l = aero.clp(mach) * (omega[0] * d / (2 * v_air_mag)) if v_air_mag > 0 else 0
 
     p_hat = (omega[0] * d / (2 * v_air_mag)) if v_air_mag > 0 else 0
     C_m_mag = aero.cmag(mach) * p_hat * beta_approx

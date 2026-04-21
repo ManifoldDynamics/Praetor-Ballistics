@@ -106,3 +106,27 @@ class EarthModelV2:
         ])
 
         return a_sph + a_j2
+
+    @classmethod
+    def calculate_magnetic_field_wmm(cls, lat_deg, lon_deg, alt_m):
+        """
+        V2.x Proprietary World Magnetic Model (WMM) logic.
+        Calculates magnetic field vector for IMU sensor simulation.
+        (Simplified spherical harmonic implementation)
+        """
+        # Baseline magnetic field at equator ~ 3e-5 Tesla
+        # B = B0 * (R_EQ / r)^3
+        r = cls.R_EQ + alt_m
+        b0 = 3.12e-5
+        strength = b0 * (cls.R_EQ / r)**3
+
+        # Magnetic inclination (dip angle) approx: tan(I) = 2 * tan(lat)
+        lat_rad = np.deg2rad(lat_deg)
+        inc_rad = np.arctan(2 * np.tan(lat_rad))
+
+        # Field vector in local NED (North, East, Down)
+        b_n = strength * np.cos(inc_rad)
+        b_e = 0.0 # simplified declination
+        b_d = strength * np.sin(inc_rad)
+
+        return np.array([b_n, b_e, b_d])

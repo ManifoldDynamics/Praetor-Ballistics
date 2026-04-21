@@ -85,8 +85,10 @@ class Aerodynamics:
     def _default_cnlp(mach): return 0.5
     @staticmethod
     def _default_cmag(mach): return -0.5
+    @staticmethod
+    def _default_clp(mach): return -0.02
 
-    def __init__(self, cd=None, cl=None, cma=None, cmaq=None, cnlp=None, cmag=None):
+    def __init__(self, cd=None, cl=None, cma=None, cmaq=None, cnlp=None, cmag=None, clp=None):
         """
         Initialize coefficients. They can be passed as:
         - A callable function that takes Mach number as input.
@@ -100,6 +102,7 @@ class Aerodynamics:
         self._cmaq_func = self._build_callable(cmaq, self._default_cmaq)
         self._cnlp_func = self._build_callable(cnlp, self._default_cnlp)
         self._cmag_func = self._build_callable(cmag, self._default_cmag)
+        self._clp_func = self._build_callable(clp, self._default_clp)
 
     def _build_callable(self, input_val, default_func, kind='linear', bounds_error=False, fill_value='extrapolate'):
         if input_val is None:
@@ -123,6 +126,7 @@ class Aerodynamics:
     def cmaq(self, mach): return self._cmaq_func(mach)
     def cnlp(self, mach): return self._cnlp_func(mach)
     def cmag(self, mach): return self._cmag_func(mach)
+    def clp(self, mach): return self._clp_func(mach)
 
     @classmethod
     def g1(cls):
@@ -155,7 +159,7 @@ class Aerodynamics:
 
         mach_data = []
         coeff_data = {
-            'cd': [], 'cl': [], 'cma': [], 'cmaq': [], 'cnlp': [], 'cmag': []
+            'cd': [], 'cl': [], 'cma': [], 'cmaq': [], 'cnlp': [], 'cmag': [], 'clp': []
         }
 
         with open(filepath, mode='r') as f:
