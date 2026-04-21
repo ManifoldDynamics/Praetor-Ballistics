@@ -35,9 +35,14 @@ State-of-the-art C++ CFD core with 5th-Order WENO reconstruction and HLLC Rieman
 
 ### 10. Multi-Body Separation Physics (V2)
 Proprietary engine for modeling the simultaneous 6-DoF motion of multiple separating bodies:
-- **Interference Aerodynamics**: Accounts for proximity-based drag variations and wake effects between bodies (e.g., discarding sabots or MIRVs).
+- **Interference Aerodynamics**: Accounts for proximity-based drag variations and wake effects between bodies.
 - **Coupled Multibody Integration**: Simultaneous integration of $N$ rigid bodies with inter-body force coupling.
-- **Separation Impulse Modeling**: Models the mechanical forces exerted during the deployment of sub-munitions or payload fairings.
+
+### 11. High-Fidelity Seeker & Sensor Simulation (V2)
+Advanced modeling of projectile-mounted sensors for guided munitions:
+- **Seeker Dynamics**: Implements sampling rates, processing latencies, and SNR-dependent stochastic noise (angular jitter and range bias).
+- **IR Signature Modeling**: Calculates target radiant intensity based on thermal characteristics and projected area.
+- **Signal-to-Noise (SNR) Logic**: Dynamically adjusts sensing accuracy and track stability based on target distance and detector sensitivity.
 
 ## Installation
 

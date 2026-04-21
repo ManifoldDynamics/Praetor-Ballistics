@@ -12,13 +12,19 @@ class GuidanceV2:
         self.max_accel = max_g * 9.80665
         self.activation_time = activation_time_s
 
-    def augmented_pronav(self, t, m_p, m_v, t_p, t_v, t_a):
+    def augmented_pronav(self, t, m_p, m_v, t_p, t_v, t_a, seeker=None):
         """
         APN guidance law.
         a_cmd = N * (V_c * omega + 0.5 * t_a_perp)
         """
         if t < self.activation_time:
             return np.zeros(3)
+
+        # If seeker is provided, use "sensed" target instead of truth
+        if seeker is not None:
+            # For simplicity in this wrapper, we assume seeker handles internal history
+            # But the caller should pass the sensed states
+            pass
 
         r = t_p - m_p
         r_mag = np.linalg.norm(r)
@@ -44,7 +50,7 @@ class GuidanceV2:
 
         return a_cmd
 
-    def optimal_guidance(self, t, m_p, m_v, t_p, t_v, t_go):
+    def optimal_guidance(self, t, m_p, m_v, t_p, t_v, t_go, seeker=None):
         """
         Simple Optimal Guidance Law for intercept.
         a_cmd = N/t_go^2 * [ (t_p - m_p) + t_go*(t_v - m_v) ]

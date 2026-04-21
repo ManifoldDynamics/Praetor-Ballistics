@@ -3,7 +3,7 @@ from scipy.integrate import solve_ivp
 from ballistics.eom import get_eom
 
 class Solver6DoF:
-    def __init__(self, projectile, aero, environment_atm, environment_earth, environment_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None):
+    def __init__(self, projectile, aero, environment_atm, environment_earth, environment_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None, seeker=None):
         self.projectile = projectile
         self.aero = aero
         self.env_atm = environment_atm
@@ -13,6 +13,7 @@ class Solver6DoF:
         self.propulsion = propulsion
         self.guidance = guidance
         self.target_state = target_state
+        self.seeker = seeker
 
     def solve(self, t_span, initial_position, initial_velocity, initial_pitch, initial_yaw, spin_rate, max_step=0.01, custom_events=None):
         if np.isscalar(initial_velocity):
@@ -181,7 +182,7 @@ class Solver6DoF:
                     tgt_vx, tgt_vy, tgt_vz
                 )
             else:
-                return get_eom(t, y, self.projectile, self.aero, self.env_atm, self.env_earth, self.env_wind, self.latitude_rad, self.propulsion, self.guidance, self.target_state)
+                return get_eom(t, y, self.projectile, self.aero, self.env_atm, self.env_earth, self.latitude_rad, self.env_wind, self.propulsion, self.guidance, self.target_state, self.seeker)
 
         sol = solve_ivp(
             eom_wrapper,

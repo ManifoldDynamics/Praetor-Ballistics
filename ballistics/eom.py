@@ -88,7 +88,7 @@ def quaternion_to_euler(q):
 from ballistics.aerothermodynamics import HypersonicHeating
 from ballistics.aerothermodynamics_v2 import AerothermodynamicsV2
 
-def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None):
+def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None, latitude_rad=0.0, propulsion=None, guidance=None, target_state=None, seeker=None):
     """
     propulsion: None, or a dict containing:
       - 'thrust_n': Thrust in Newtons
@@ -222,14 +222,32 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     F_guide_earth = np.zeros(3)
 
     if guidance is not None and target_state is not None:
-        t_pos = np.array(target_state['pos']) + np.array(target_state['vel']) * t
-        t_vel = np.array(target_state['vel'])
+        t_pos_truth = np.array(target_state['pos']) + np.array(target_state['vel']) * t
+        t_vel_truth = np.array(target_state['vel'])
+
+        if seeker is not None:
+            # Sensed state includes latency and noise
+            # We calculate truth at t - latency for the sensed signal
+            t_delayed = max(0.0, t - seeker.latency)
+            t_pos_delayed = np.array(target_state['pos']) + np.array(target_state['vel']) * t_delayed
+            t_vel_delayed = np.array(target_state['vel'])
+
+            # Simple IR SNR logic
+            t_temp = target_state.get('temperature_k', 300.0)
+            t_area = target_state.get('area_m2', 1.0)
+            from ballistics.sensors_v2 import IRSignatureModelV2
+            intensity = IRSignatureModelV2.calculate_radiant_intensity(t_temp, t_area)
+            snr = IRSignatureModelV2.calculate_snr(intensity, np.linalg.norm(t_pos_truth - pos))
+
+            t_pos, t_vel = seeker.get_sensed_target(t, t_pos_delayed, t_vel_delayed, pos, snr)
+        else:
+            t_pos, t_vel = t_pos_truth, t_vel_truth
 
         # Support V2 Guidance Laws
-        if hasattr(guidance, 'augmented_pronav'):
+        if t_pos is not None and hasattr(guidance, 'augmented_pronav'):
             t_accel = target_state.get('accel', np.zeros(3))
-            a_cmd_earth = guidance.augmented_pronav(t, pos, vel, t_pos, t_vel, t_accel)
-        else:
+            a_cmd_earth = guidance.augmented_pronav(t, pos, vel, t_pos, t_vel, t_accel, seeker=seeker)
+        elif t_pos is not None:
             # Fallback to V1
             a_cmd_earth = guidance.get_commanded_acceleration(t, pos, vel, t_pos, t_vel)
 

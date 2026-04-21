@@ -39,9 +39,22 @@ class StandardAtmosphere:
         T_v = T_k / (1.0 - (P_vapor / P_pa) * (1.0 - 0.622))
         return T_v
 
-    def get_properties(self, altitude, version=1):
+    @classmethod
+    def get_properties(cls, altitude, version=1):
         if version == 2:
             return AtmosphereV2.get_properties(altitude)
+
+        # Fallback for static calls using Standard Sea Level defaults
+        default_instance = cls()
+        return default_instance._get_properties_impl(altitude)
+
+    def get_properties_inst(self, altitude):
+        """
+        Instance-based method for initialized atmospheric models.
+        """
+        return self._get_properties_impl(altitude)
+
+    def _get_properties_impl(self, altitude):
         """
         Returns temperature, pressure, density, and speed of sound at a given altitude.
         Altitude in meters relative to the baseline station.
