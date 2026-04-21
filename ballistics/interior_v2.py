@@ -140,14 +140,21 @@ class InteriorSolverV2:
                 dv_dt = net_force / M_eff
                 dx_dt = v
 
-            # 6. Burn Rate
+            # 6. Burn Rate - Vieille's Law with Temperature Sensitivity
+            # r = a * P^n * (1 + beta * (T_initial - T_ref))
+            # (Simplified V2.x proprietary sensitivity model)
+            T_ref = 294.15 # 21C reference
+            T_init = 294.15 # assuming nominal for now
+            temp_sensitivity = 0.002 # 0.2% per degree K
+            beta_v = 1.0 + temp_sensitivity * (T_init - T_ref)
+
             # Using multi-perf logic if theta is exactly 0 as a flag, otherwise generic
             if theta == 0:
                 phi = GrainGeometryV2.multi_perforated_7_perf(z)
             else:
                 phi = GrainGeometryV2.get_form_function(theta, z)
 
-            dz_dt = (a_burn * (P**n_burn) / e0) * phi if z < 1.0 else 0.0
+            dz_dt = (a_burn * beta_v * (P**n_burn) / e0) * phi if z < 1.0 else 0.0
 
             return [dx_dt, dv_dt, dz_dt, dQ_dt]
 
