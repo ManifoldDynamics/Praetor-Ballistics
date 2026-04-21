@@ -70,15 +70,23 @@ class LethalityRayTracer:
         nonzero = speeds > 0.0
         directions[nonzero] = directions[nonzero] / speeds[nonzero, np.newaxis]
 
-        # V2: Obstruction Check (Shadowing)
-        # If terrain is present, fragments can be blocked by hills/buildings
+        # V2: Rigorous Obstruction Check (Distance-Sorted Occlusion)
+        # Fragments are only blocked if the terrain intersection is closer than the target intersection
+        blocked_rays = set()
         if version == 2 and terrain is not None and terrain.mesh is not None:
-            t_locs, t_idx_ray, _ = terrain.mesh.ray.intersects_location(origins, directions, multiple_hits=False)
-            # Find rays that hit terrain closer than the target mesh
-            # (Simplified check: for now we just flag them if they hit anything)
-            blocked_rays = set(t_idx_ray)
-        else:
-            blocked_rays = set()
+            # 1. Get all intersections with the target mesh
+            locs_target, idx_target, _ = self.mesh.ray.intersects_location(origins, directions)
+            dist_target = {idx: np.linalg.norm(loc - origins[idx]) for loc, idx in zip(locs_target, idx_target)}
+
+            # 2. Get intersections with terrain
+            t_locs, t_idx_ray, _ = terrain.mesh.ray.intersects_location(origins, directions)
+
+            for i, ray_idx in enumerate(t_idx_ray):
+                d_terrain = np.linalg.norm(t_locs[i] - origins[ray_idx])
+                d_target = dist_target.get(ray_idx, float('inf'))
+
+                if d_terrain < d_target:
+                    blocked_rays.add(ray_idx) # Terrain is in front of the target
 
         # Perform ray intersection using trimesh
         # 'intersects_location' returns:

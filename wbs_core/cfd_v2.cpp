@@ -82,9 +82,21 @@ py::dict solve_cfd_v2(py::array_t<bool> is_solid_arr, double dx, double dy, doub
     // Boundary Integration for Forces
     double total_fx = 0.0, total_fy = 0.0;
     for (int iter = 0; iter < iterations; ++iter) {
-        // (WENO-5 Flux Divergence Implementation)
-        // For efficiency in the V2x MVP, we calculate surface pressure distribution
-        // using the HLLC Riemann solver at the solid-fluid interface.
+        std::vector<StateV2> next_grid = grid;
+        for (int i=1; i<nx-1; ++i) {
+            for (int j=1; j<ny-1; ++j) {
+                for (int k=1; k<nz-1; ++k) {
+                    if (is_solid(i, j, k)) continue;
+
+                    StateV2 flux_x_L, flux_x_R;
+                    CFDSolverV2::hllc_flux(grid[(i-1)*ny*nz + j*nz + k], grid[i*ny*nz + j*nz + k], 1.4, flux_x_L);
+                    CFDSolverV2::hllc_flux(grid[i*ny*nz + j*nz + k], grid[(i+1)*ny*nz + j*nz + k], 1.4, flux_x_R);
+
+                    next_grid[i*ny*nz + j*nz + k] = grid[i*ny*nz + j*nz + k] + (flux_x_L + (flux_x_R * -1.0)) * (0.01 / dx);
+                }
+            }
+        }
+        grid = next_grid;
     }
 
     for (int i=1; i<nx-1; ++i) {
@@ -101,11 +113,22 @@ py::dict solve_cfd_v2(py::array_t<bool> is_solid_arr, double dx, double dy, doub
     }
 
     double q_inf = 0.5 * rho_inf * u_inf * u_inf;
-    double area = dy * dz * 10.0; // Reference area approximation
+
+    // V2.x Rigorous Projected Area Integration
+    double projected_area = 0.0;
+    for (int j=0; j<ny; ++j) {
+        for (int k=0; k<nz; ++k) {
+            bool col_has_solid = false;
+            for (int i=0; i<nx; ++i) {
+                if (is_solid(i, j, k)) { col_has_solid = true; break; }
+            }
+            if (col_has_solid) projected_area += dy * dz;
+        }
+    }
 
     py::dict res;
-    res["cd"] = std::abs(total_fx) / (q_inf * area + 1e-9);
-    res["cl"] = std::abs(total_fy) / (q_inf * area + 1e-9);
+    res["cd"] = std::abs(total_fx) / (q_inf * projected_area + 1e-9);
+    res["cl"] = std::abs(total_fy) / (q_inf * projected_area + 1e-9);
     return res;
 }
 

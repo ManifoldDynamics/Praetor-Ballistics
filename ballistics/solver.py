@@ -50,7 +50,8 @@ class Solver6DoF:
         use_thermo = hasattr(self.projectile, 'material') and self.projectile.material is not None
         num_thermal = 5 if use_thermo else 0 # V2 default
         num_flex = 4 if self.flexible else 0 # 2 modes * (eta, eta_dot)
-        num_states = 13 + num_thermal + num_flex
+        num_guide = 1 if self.guidance is not None else 0 # alpha filter
+        num_states = 13 + num_thermal + num_flex + num_guide
 
         y0 = np.zeros(num_states)
         y0[0:3] = initial_position

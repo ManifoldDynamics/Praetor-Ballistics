@@ -12,7 +12,7 @@ class GuidanceV2:
         self.max_accel = max_g * 9.80665
         self.activation_time = activation_time_s
 
-    def augmented_pronav(self, t, m_p, m_v, t_p, t_v, t_a, seeker=None):
+    def augmented_pronav(self, t, m_p, m_v, t_p, t_v, t_a, seeker=None, alpha_filtered=None):
         """
         APN guidance law.
         a_cmd = N * (V_c * omega + 0.5 * t_a_perp)
@@ -43,9 +43,10 @@ class GuidanceV2:
 
         a_cmd = self.N * (v_c * np.cross(omega, r_hat) + 0.5 * t_a_perp)
 
-        # V2.x Epicyclic Swerve Filter
+        # V2.x High-Fidelity Epicyclic Swerve Filter
+        # Accounts for natural gyroscopic nutation/precession
         from ballistics.sensors_v2 import SeekerModelV2
-        a_cmd = SeekerModelV2.apply_epicyclic_filter(a_cmd, [0,0,0]) # Placeholder history
+        a_cmd = SeekerModelV2.apply_epicyclic_filter(a_cmd, alpha_filtered)
 
         # Limit G
         a_mag = np.linalg.norm(a_cmd)

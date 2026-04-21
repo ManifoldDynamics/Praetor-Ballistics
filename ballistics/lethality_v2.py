@@ -12,13 +12,16 @@ class FragmentationModelV2:
     @staticmethod
     def mott_distribution(total_mass, num_fragments, mott_constant):
         """
-        Mott's equation for fragment distribution:
-        N(m) = N0 * exp(-m^0.5 / mu)
+        V2.x Rigorous Mott Distribution Implementation.
+        Probability Density: f(m) = (1 / (2 * mu * sqrt(m))) * exp(-sqrt(m) / mu)
+        Uses Inverse Transform Sampling for exact frequency matching.
         """
-        # (Simplified proprietary stochastic sampler)
         mu = mott_constant
-        masses = np.random.exponential(mu, num_fragments)**2
-        # Normalize to total mass
+        # Inverse of CDF F(m) = 1 - exp(-sqrt(m)/mu) is m = (mu * ln(1-u))^2
+        u = np.random.uniform(0, 1, num_fragments)
+        masses = (mu * np.log(1.0 - u))**2
+
+        # Scale to match total mass constraint
         return masses * (total_mass / np.sum(masses))
 
     @staticmethod

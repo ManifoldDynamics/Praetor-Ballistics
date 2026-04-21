@@ -15,7 +15,7 @@ def test_high_fidelity_spin_decay():
 def test_epicyclic_filtering():
     # Guidance command with high-frequency noise (simulating nutation)
     cmd_raw = np.array([10.0, 5.0, 0.0])
-    alpha_wobble = np.array([0.1, 0.05, 0.0]) # High alpha trigger
+    alpha_wobble = 0.1 # High alpha trigger
 
     cmd_filtered = SeekerModelV2.apply_epicyclic_filter(cmd_raw, alpha_wobble)
 

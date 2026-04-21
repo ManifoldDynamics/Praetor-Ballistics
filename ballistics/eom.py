@@ -228,6 +228,9 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
         t_pos_truth = np.array(target_state['pos']) + np.array(target_state['vel']) * t
         t_vel_truth = np.array(target_state['vel'])
 
+        # High-Fidelity alpha state tracking (e.g. index 18)
+        alpha_filtered = state[18] if len(state) > 18 else 0.0
+
         if seeker is not None:
             # Sensed state includes latency and noise
             # We calculate truth at t - latency for the sensed signal
@@ -249,7 +252,7 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
         # Support V2 Guidance Laws
         if t_pos is not None and hasattr(guidance, 'augmented_pronav'):
             t_accel = target_state.get('accel', np.zeros(3))
-            a_cmd_earth = guidance.augmented_pronav(t, pos, vel, t_pos, t_vel, t_accel, seeker=seeker)
+            a_cmd_earth = guidance.augmented_pronav(t, pos, vel, t_pos, t_vel, t_accel, seeker=seeker, alpha_filtered=alpha_filtered)
         elif t_pos is not None:
             # Fallback to V1
             a_cmd_earth = guidance.get_commanded_acceleration(t, pos, vel, t_pos, t_vel)
@@ -364,6 +367,11 @@ def get_eom(t, state, projectile, aero, env_atmosphere, env_earth, env_wind=None
     if len(flexible_derivatives) > 0:
         idx = 13 + len(thermal_derivatives)
         state_dot[idx:idx+len(flexible_derivatives)] = flexible_derivatives
+
+    # Epicyclic alpha filter derivative (Simplified low-pass: dot = (alpha - alpha_f)/tau)
+    if len(state) > 18:
+        tau_filter = 0.05
+        state_dot[18] = (alpha_approx - alpha_filtered) / tau_filter
 
     return state_dot
 

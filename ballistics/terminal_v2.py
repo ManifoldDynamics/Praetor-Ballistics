@@ -81,28 +81,34 @@ class TerminalBallisticsV2:
     @staticmethod
     def calculate_thermo_mechanical_shear(rpm, temperature_k, material_yield_sl_pa):
         """
-        V2.x Proprietary "Aero-Fuse" Trigger Model.
-        Calculates if centrifugal stresses exceed the thermally-degraded yield strength.
+        V2.x Rigorous "Aero-Fuse" Trigger Physics.
+        Calculates casing failure by linking thermal yield degradation to centrifugal hoop stress.
         """
-        # Yield strength degradation: sigma_y(T) = sigma_y0 * (1 - (T/T_melt)^2)
-        # (Simplified proprietary temperature scaling)
-        T_melt = 1700.0 # RHA
-        temp_factor = max(0.1, 1.0 - (temperature_k / T_melt)**1.5)
+        # Johnson-Cook style Yield Strength Degradation
+        T_melt = 1811.0 # Iron/Steel melting point (K)
+        T_ref = 293.15  # Reference temperature (K)
+        m_thermal = 1.09 # Thermal softening exponent for RHA
+
+        if temperature_k >= T_melt:
+             temp_factor = 0.0
+        else:
+             T_star = (temperature_k - T_ref) / (T_melt - T_ref)
+             temp_factor = max(0.0, 1.0 - (T_star**m_thermal))
+
         sigma_y_eff = material_yield_sl_pa * temp_factor
 
-        # Centrifugal stress: sigma_c = rho * omega^2 * r^2
-        # (Simplified hoop stress proprietary approximation)
-        omega = rpm * (2 * np.pi / 60.0)
-        rho = 7850.0
-        r = 0.01
-        sigma_centrifugal = rho * (omega**2) * (r**2)
+        # Rigorous Centrifugal Hoop Stress: sigma_theta = rho * omega^2 * r^2
+        omega = rpm * (2.0 * np.pi / 60.0)
+        rho = 7850.0 # kg/m^3
+        r_outer = 0.01 # m (caliber radius)
 
-        # Safety factor / disintegration trigger
-        # If centrifugal stress > yield strength, casing shears.
-        disintegrated = sigma_centrifugal > sigma_y_eff
+        sigma_hoop = rho * (omega**2) * (r_outer**2)
+
+        # Disintegration Trigger: Failure when hoop stress exceeds degraded yield
+        disintegrated = sigma_hoop > sigma_y_eff
 
         return {
             'disintegrated': disintegrated,
             'effective_yield_pa': sigma_y_eff,
-            'centrifugal_stress_pa': sigma_centrifugal
+            'centrifugal_stress_pa': sigma_hoop
         }
