@@ -32,41 +32,53 @@ class TerrainModelV2:
     def calculate_secondary_splash(self, impact_pos, impact_vel, impact_mass):
         """
         Calculates secondary fragments (splash) from ground impact.
-        Returns a list of (velocity_vector, mass).
+        V2.x Proprietary Material-Dependent Reflection/Absorption.
         """
-        # Proprietary V2 Splash Logic
-        # Impact energy E = 0.5 * m * v^2
         v_mag = np.linalg.norm(impact_vel)
         energy = 0.5 * impact_mass * v_mag**2
 
-        # Ground absorption factor
-        absorption = {'soil': 0.8, 'rock': 0.3, 'concrete': 0.4}.get(self.ground_type, 0.5)
-        splash_energy = energy * (1.0 - absorption)
+        # Ground Material Properties: [Absorption, Elasticity, Fragmentation_Threshold]
+        # High absorption = soft ground (soil). High elasticity = hard ground (concrete).
+        ground_params = {
+            'soil':     [0.85, 0.1, 200.0],
+            'rock':     [0.2, 0.6, 500.0],
+            'concrete': [0.15, 0.7, 800.0],
+            'water':    [0.95, 0.05, 50.0],
+            'steel':    [0.05, 0.85, 2000.0]
+        }
 
-        # Number of secondary fragments depends on energy and ground type
-        num_frags = int(splash_energy / 50.0) # 50J per secondary frag
-        num_frags = np.clip(num_frags, 0, 50) # Limit for MVP
+        abs_k, el_k, frag_thresh = ground_params.get(self.ground_type, [0.5, 0.3, 300.0])
+
+        # Effective Splash Energy: E_eff = E * (1 - Absorption)
+        # However, for soft ground, more energy goes into cratering than splashing.
+        e_splash = energy * (1.0 - abs_k)
+
+        # Number of secondary fragments scales with energy exceeding threshold
+        if e_splash < frag_thresh:
+            return []
+
+        num_frags = int((e_splash - frag_thresh) / (frag_thresh * 0.1))
+        num_frags = np.clip(num_frags, 1, 64)
 
         secondary_frags = []
-        if num_frags == 0: return []
+        normal = np.array([0.0, 0.0, 1.0]) # Simplified for V2
 
-        # Splash vectors are biased upwards and outwards from the impact normal
-        # For flat ground, normal is [0, 0, 1]
-        normal = np.array([0.0, 0.0, 1.0])
+        # Reflection Vector (perfect elastic bounce)
+        v_refl = impact_vel - 2.0 * np.dot(impact_vel, normal) * normal
 
         for _ in range(num_frags):
-            # Stochastic distribution in the upper hemisphere
+            # Stochastic scattering biased by elasticity
+            # Harder ground (high el_k) follows reflection vector more closely.
             rand_vec = np.random.normal(0, 1, 3)
-            rand_vec[2] = abs(rand_vec[2]) # Ensure it goes up
+            rand_vec[2] = abs(rand_vec[2]) # Keep above ground
             rand_vec /= np.linalg.norm(rand_vec)
 
-            # Mix with reflection vector for momentum conservation
-            v_refl = impact_vel - 2 * np.dot(impact_vel, normal) * normal
-            v_frag = 0.7 * rand_vec + 0.3 * (v_refl / v_mag)
+            # Weighted average: Elasticity * Reflection + (1-Elasticity) * Scattering
+            v_frag = el_k * (v_refl / v_mag) + (1.0 - el_k) * rand_vec
             v_frag /= np.linalg.norm(v_frag)
 
-            # Velocity magnitude based on remaining energy
-            frag_v = np.sqrt(2 * (splash_energy / num_frags) / 0.01) # Assuming 10g frags
-            secondary_frags.append((v_frag * frag_v, 0.01))
+            # Residual velocity: proportional to elasticity and energy share
+            v_resid = np.sqrt(2.0 * (e_splash / num_frags) / 0.01) * (0.5 + 0.5 * el_k)
+            secondary_frags.append((v_frag * v_resid, 0.01))
 
         return secondary_frags

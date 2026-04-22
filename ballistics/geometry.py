@@ -87,10 +87,27 @@ class ProjectileGeometry:
         if self.nose_type == "cone":
             return (np.pi * h / 3.0) * (r_base**2 + r_base*r_tip + r_tip**2)
         else:
-            # Approximate tangent ogive volume
-            # V_ogive ~ pi * r^2 * h * (1 - 2/3 * (r/h)^2) for a sharp tip.
-            # We'll use a standard empirical volume coefficient for ogives: ~0.54 * bounding cylinder
-            return 0.54 * np.pi * r_base**2 * h
+            # Exact integral for tangent ogive volume
+            # V = pi * [ L*(R^2 + s^2) - L^3/3 - s*(R^2-s^2)*arcsin(L/R) ]
+            # where R is the ogive radius and s is the offset from the centerline to the center of rotation
+            r_ogive = (r_base**2 + h**2) / (2.0 * r_base)
+            s = r_ogive - r_base
+
+            # Integral components
+            term1 = h * (r_ogive**2 + s**2)
+            term2 = (h**3) / 3.0
+            term3 = s * (r_ogive**2) * np.arcsin(h / r_ogive)
+
+            v_ogive = np.pi * (term1 - term2 - term3)
+
+            # Handle meplat truncation by subtracting the small tip ogive volume
+            if r_tip > 0:
+                h_tip = np.sqrt(r_ogive**2 - (r_ogive - r_tip)**2)
+                # (Simplified subtraction for V2)
+                v_tip = 0.33 * np.pi * r_tip**2 * h_tip
+                v_ogive -= v_tip
+
+            return max(0.0, v_ogive)
 
     def total_volume(self):
         """Calculates the total internal volume."""

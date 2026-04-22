@@ -79,6 +79,42 @@ class TerminalBallisticsV2:
         }
 
     @staticmethod
+    def alekseevskii_tate_penetration(v_impact, rho_p, rho_t, y_p, r_t, l0):
+        """
+        V2.x Proprietary Long-Rod Hydrodynamic Penetration Model.
+        Solves the Alekseevskii-Tate equation:
+        0.5 * rho_p * (v - u)^2 + Y_p = 0.5 * rho_t * u^2 + R_t
+        Where u is penetration velocity.
+        """
+        if v_impact <= 0:
+            return 0.0
+
+        # Calculate mu = sqrt(rho_t / rho_p)
+        mu = np.sqrt(rho_t / rho_p)
+        delta_r_y = r_t - y_p
+
+        # Solve for u (penetration velocity)
+        # quadratic: 0.5*(rho_p - rho_t)*u^2 - rho_p*v*u + 0.5*rho_p*v^2 - (R_t - Y_p) = 0
+        a = 0.5 * (rho_p - rho_t)
+        b = -rho_p * v_impact
+        c = 0.5 * rho_p * v_impact**2 - delta_r_y
+
+        if abs(a) < 1e-9: # rho_p == rho_t
+            u = -c / b
+        else:
+            disc = b**2 - 4*a*c
+            if disc < 0:
+                return 0.0
+            u = (-b - np.sqrt(disc)) / (2*a)
+
+        if u <= 0:
+            return 0.0
+
+        # Penetration depth P = L0 * (u / (v - u))
+        p_depth = l0 * (u / (v_impact - u))
+        return p_depth
+
+    @staticmethod
     def calculate_thermo_mechanical_shear(rpm, temperature_k, material_yield_sl_pa):
         """
         V2.x Rigorous "Aero-Fuse" Trigger Physics.

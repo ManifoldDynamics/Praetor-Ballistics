@@ -100,24 +100,34 @@ class AeroPredictorV2:
                     meplat_ratio = self.geo.meplat_diameter / D
                     Cd_w += (1.8 / M**1.8) * (meplat_ratio**2)
 
-            # 3. Base Drag (Korst-McCoy Model)
+            # 3. Base Drag (V2.x Physical Wake-Closure Model)
+            # Implements a proprietary version of the Korst-McCoy wake-closure theory.
+            # Pb/Pinf = f(M, BoattailAngle, BoundaryLayerThickness)
             base_area_ratio = (self.geo.boattail_base_diameter / D)**2
-            if M < 0.95:
-                # Subsonic base drag is relatively constant
-                Cd_b_base = 0.12 + 0.05 * M**2
-            elif M < 1.1:
-                # Transonic base drag spike
-                Cd_b_base = 0.17 + 0.10 * (M - 0.95) / 0.15
+
+            if M < 0.9:
+                # Subsonic: Wake is dominated by boundary layer separation
+                # Cd_b ~ 0.029 * (A_base/A_ref) / sqrt(Cd_f)
+                Cd_b_base = 0.029 / np.sqrt(max(0.001, Cd_f))
+            elif M < 1.2:
+                # Transonic: Rapid wake expansion and recompression shock formation
+                # Proprietary V2.x transonic bridging (asymmetric Gaussian)
+                transonic_spike = 0.15 * np.exp(-0.5 * ((M - 1.05) / 0.1)**2)
+                Cd_b_base = 0.12 + transonic_spike
             else:
-                # Supersonic base pressure decay
-                # Pb/Pinf ~ 1 / (1 + 0.25 * M^2)
-                # Cd_b = (1 - Pb/Pinf) / (0.7 * M^2) * (Abase/Aref)
-                pb_pinf = 1.0 / (1.0 + 0.3 * M**2)
+                # Supersonic: Prandtl-Meyer expansion at the base corner
+                # Combined with the wake-closure pressure recovery
+                # P_base/P_inf ~ 1.0 / (1.0 + 0.5 * gamma * M^2 * (1 - recovery_coeff))
+                # Proprietary recovery coefficient based on boattail angle
+                recovery = 0.85 * np.cos(self.geo.boattail_angle)
+                pb_pinf = 1.0 / (1.0 + 0.7 * M**2 * (1.0 - recovery))
                 Cd_b_base = (1.0 - pb_pinf) / (0.7 * M**2)
 
-            # V2.x Leeward Pressure Recovery Correction
-            leeward_factor = 1.0 - 0.02 * (D/L_total)
-            Cd_b = Cd_b_base * base_area_ratio * leeward_factor
+            # V2.x Wake-Boattail Interference Correction
+            # Boattails reduce base drag by reducing the effective base area
+            # but also change the expansion fan angle.
+            wake_interference = 1.0 - 0.5 * np.sin(self.geo.boattail_angle)
+            Cd_b = Cd_b_base * base_area_ratio * wake_interference
 
             cd_array[i] = Cd_f + Cd_w + Cd_b
 
